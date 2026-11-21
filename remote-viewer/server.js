@@ -249,7 +249,11 @@ async function captureLoop() {
       state.lastFrameBytes = buf.length;
       if (state.frameSeq === 1) console.log(`[stream] first frame ${buf.length} bytes`);
       for (const client of wss.clients) {
-        if (client.readyState === 1) client.send(buf, { binary: true });
+        if (client.readyState !== 1) continue;
+        // A client that cannot keep up must not stall capture for everybody;
+        // drop frames for it and let the stream stay at a steady rate.
+        if ((client.bufferedAmount || 0) > 2 * 1024 * 1024) continue;
+        client.send(buf, { binary: true });
       }
     }
     const elapsed = Date.now() - started;
@@ -289,11 +293,33 @@ const server = http.createServer(async (req, res) => {
     if (!authorized(req, url)) {
       return sendText(res, 401, 'Authentication required. Open the session URL that includes ?token=...');
     }
-    if (url.searchParams.get('token') && TOKEN) {
-      const cookie = `sim_session=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`;
+    const queryToken = url.searchParams.get('token');
+    if (queryToken && TOKEN) {
+      // The viewer is often embedded in another page, where SameSite=Strict/Lax
+      // cookies are dropped; None works in frames and the token is short-lived.
+      const cookie = `sim_session=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=86400`;
       res.setHeader('set-cookie', cookie);
     }
     const file = path.join(PUBLIC_DIR, 'index.html');
+    // Assets are fetched by the browser without the page's query string, so the
+    // token is carried on every asset reference as well. Without this the shell
+    // loads but app.js is refused and the UI sits on "Connecting…" forever.
+    if (queryToken && TOKEN) {
+      const html = fs
+        .readFileSync(file, 'utf8')
+        .replace(/(href|src)="(styles\.css|app\.js|favicon\.svg)"/g, `$1="$2?token=${encodeURIComponent(queryToken)}"`);
+      res.writeHead(200, {
+        'content-type': MIME['.html'],
+        'cache-control': 'no-store',
+        'content-length': Buffer.byteLength(html),
+        'x-frame-options': 'SAMEORIGIN',
+        'referrer-policy': 'no-referrer',
+        'x-robots-tag': 'noindex, nofollow',
+        'content-security-policy':
+          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
+      });
+      return res.end(html);
+    }
     res.writeHead(200, {
       'content-type': MIME['.html'],
       'cache-control': 'no-store',

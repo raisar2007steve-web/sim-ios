@@ -4,9 +4,10 @@
 # Providers, tried in order until one serves /api/health over the public URL:
 #   1. Cloudflare named tunnel (CLOUDFLARED_TUNNEL_TOKEN + TUNNEL_HOSTNAME)
 #      -> the same permanent hostname on every run
-#   2. Cloudflare quick tunnel over HTTP/2 (no account needed)
-#   3. localhost.run over SSH (no account needed)
-#   4. ngrok (NGROK_AUTHTOKEN)
+#   2. ngrok on a reserved/static domain (NGROK_AUTHTOKEN + NGROK_STATIC_DOMAIN)
+#      -> a permanent URL without owning a domain (ngrok's free static domain)
+#   3. Cloudflare quick tunnel over HTTP/2 (no account needed, random URL)
+#   4. localhost.run over SSH (no account needed, random URL)
 #
 # The named tunnel is tried first on purpose: it is the only provider that
 # gives a stable URL, so a configured Cloudflare hostname is never displaced
@@ -211,7 +212,7 @@ try_localhost_run() {
 
 try_ngrok() {
   [[ -n "${NGROK_AUTHTOKEN:-}" ]] || return 1
-  local arch file url deadline
+  local arch file url deadline static_url
   arch="$(uname -m)"
   case "$arch" in
     arm64) file="ngrok-v3-stable-darwin-arm64.zip" ;;
@@ -224,7 +225,25 @@ try_ngrok() {
       && install -m 0755 /tmp/ngrok-bin/ngrok "$HOME/.local/bin/ngrok" || return 1
     export PATH="$HOME/.local/bin:$PATH"
   fi
+  static_url="${NGROK_STATIC_DOMAIN:-${NGROK_DOMAIN:-}}"
+  static_url="$(printf '%s' "$static_url" | sed -E 's#^https?://##; s#/+$##')"
+
   : > "$TUNNEL_LOG"
+  if [[ -n "$static_url" ]]; then
+    # A reserved domain keeps the public address identical on every run.
+    start_process ngrok-static ngrok http "$PORT" --log stdout --log-format json \
+      --authtoken "$NGROK_AUTHTOKEN" --url "https://$static_url"
+    url="https://$static_url"
+    diag "ngrok static domain: $url (stable across runs)"
+    if wait_for_endpoint "$url" 120; then
+      printf '%s' "$url"
+      return 0
+    fi
+    diag "ngrok static domain never became healthy"
+    stop_process
+    return 1
+  fi
+
   start_process ngrok ngrok http "$PORT" --log stdout --log-format json --authtoken "$NGROK_AUTHTOKEN"
   deadline=$(( $(date -u +%s) + 40 ))
   url=""
@@ -270,7 +289,7 @@ try_cloudflared_named() {
 }
 
 PUBLIC_URL=""
-for provider in try_cloudflared_named try_cloudflared_quick try_localhost_run try_ngrok; do
+for provider in try_cloudflared_named try_ngrok try_cloudflared_quick try_localhost_run; do
   diag "attempt: $provider"
   # lib.sh turns on `set -e`; a provider that is not configured or fails must
   # fall through to the next one instead of aborting the chain.

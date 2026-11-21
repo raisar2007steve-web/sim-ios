@@ -1,7 +1,12 @@
 'use strict';
 
 const params = new URLSearchParams(window.location.search);
-const sessionToken = params.get('token') || '';
+// Fall back to the token the server appended to this script's own URL, which is
+// what happens when the page is embedded and its query string is not forwarded.
+const scriptParams = new URLSearchParams(
+  (document.currentScript && document.currentScript.src ? document.currentScript.src : window.location.href).split('?')[1] || ''
+);
+const sessionToken = params.get('token') || scriptParams.get('token') || '';
 
 const el = {
   status: document.getElementById('status'),

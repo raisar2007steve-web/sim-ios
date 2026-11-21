@@ -132,6 +132,48 @@ README.md                this file
 SECURITY.md              access model and credential handling
 ```
 
+## A permanent, private address
+
+A GitHub Pages site cannot host this stream: Pages serves static files only, so
+it cannot run the capture/WebSocket server or terminate a tunnel. What you can
+do is give the tunnel a permanent hostname. Two supported options, both free
+and both keeping the token requirement on top:
+
+**Option A — Cloudflare Tunnel (recommended, no port, no card).**
+
+1. Cloudflare Zero Trust → **Networks → Tunnels → Create** (Cloudflared), and
+   copy the tunnel token.
+2. Add a **Public Hostname** on a domain in that Cloudflare account, service
+   `http://localhost:8080`.
+3. Repository → Settings → Secrets → Actions: `CLOUDFLARED_TUNNEL_TOKEN`
+   (secret) and `TUNNEL_HOSTNAME` (secret or variable), e.g. `sim.example.com`.
+
+Every run is then published at `https://sim.example.com` — the same address
+forever, and no inbound port is opened anywhere.
+
+**Option B — ngrok reserved domain (no domain of your own needed).**
+
+1. Create a free ngrok account; it includes one free static domain
+   (`something.ngrok-free.app`).
+2. Secrets: `NGROK_AUTHTOKEN`, and `NGROK_STATIC_DOMAIN` (secret or variable)
+   set to that hostname.
+
+The named tunnel is tried first, then the ngrok static domain, then the random
+quick tunnels — so if a permanent provider is configured it is always the one
+used, and the address never changes.
+
+**Privacy.** The session always requires the temporary `?token=` (48 hex
+characters, HttpOnly cookie or `Authorization: Bearer`), and the tunnel exposes
+only that one HTTPS port. Two further measures matter:
+
+- **Make the repository private.** On a public repository, run summaries and
+  the `session-access` artifact are world-readable, which exposes the URL and
+  token. On a private repository only collaborators can read them.
+- **Add a second gate at the edge.** For the Cloudflare option, attach a
+  Cloudflare Access policy (email/one-time PIN) to the hostname; for ngrok, add
+  `--basic-auth` or an OAuth policy in the dashboard. Then even a leaked token
+  is not enough to reach the runner.
+
 ## Session lifetime and the heartbeat log
 
 `duration_minutes` defaults to **0**, which keeps the session live until you

@@ -100,8 +100,9 @@ jobs:
       - name: Start HTTPS tunnel
         env:
           CLOUDFLARED_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARED_TUNNEL_TOKEN }}
-          TUNNEL_HOSTNAME: ${{ secrets.TUNNEL_HOSTNAME }}
+          TUNNEL_HOSTNAME: ${{ secrets.TUNNEL_HOSTNAME || vars.TUNNEL_HOSTNAME }}
           NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+          NGROK_STATIC_DOMAIN: ${{ vars.NGROK_STATIC_DOMAIN || secrets.NGROK_STATIC_DOMAIN }}
         run: bash scripts/ios-simulator/start-tunnel.sh
 
       - name: Verify endpoint, authentication, stream and input
