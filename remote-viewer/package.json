@@ -1,0 +1,17 @@
+{
+  "name": "remote-ios-simulator-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser viewer and WebSocket streaming server for a remote iOS Simulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "SIM_MOCK=1 PORT=3000 node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

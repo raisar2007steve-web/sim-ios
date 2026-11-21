@@ -1,0 +1,6 @@
+.session/
+artifacts/
+build/
+remote-viewer/node_modules/
+.DS_Store
+*.log

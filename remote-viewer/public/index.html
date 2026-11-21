@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Remote iOS Simulator</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>Remote iOS Simulator</h1>
+  </div>
+  <div class="status" id="status" data-state="connecting" role="status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<section class="infobar" aria-label="Session environment">
+  <div class="chip"><span class="label">macOS</span><span class="value" id="info-macos">—</span></div>
+  <div class="chip"><span class="label">Xcode</span><span class="value" id="info-xcode">—</span></div>
+  <div class="chip"><span class="label">iOS</span><span class="value" id="info-ios">—</span></div>
+  <div class="chip"><span class="label">Device</span><span class="value" id="info-device">—</span></div>
+  <div class="chip chip-input"><span class="label">Input</span><span class="value" id="info-input">—</span></div>
+  <div class="chip chip-expiry"><span class="label">Session ends</span><span class="value" id="info-expiry">—</span></div>
+</section>
+
+<main class="stage" id="stage">
+  <div class="device" id="device">
+    <div class="device-notch" aria-hidden="true"></div>
+    <canvas id="screen" width="1179" height="2556" aria-label="Live iOS Simulator screen" tabindex="0"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="overlay-card">
+        <h2 id="overlay-title">Connecting to simulator</h2>
+        <p id="overlay-body">Waiting for the first frame from the macOS runner.</p>
+        <button type="button" class="btn primary" id="overlay-retry">Retry</button>
+      </div>
+    </div>
+    <div class="mock-badge" id="mock-badge" hidden>DEMO PREVIEW · NO SIMULATOR ATTACHED</div>
+  </div>
+</main>
+
+<footer class="controls" aria-label="Simulator controls">
+  <button type="button" class="btn" id="btn-home" title="Home button (Shift+Home)">Home</button>
+  <button type="button" class="btn" id="btn-rotate" title="Rotate device">Rotate</button>
+  <button type="button" class="btn" id="btn-keyboard" title="Send keyboard input to the simulator" aria-pressed="false">Keyboard</button>
+  <button type="button" class="btn" id="btn-fullscreen" title="Full screen (F)">Fullscreen</button>
+  <button type="button" class="btn" id="btn-reconnect" title="Reconnect the stream">Reconnect</button>
+  <button type="button" class="btn ghost" id="btn-session" title="Session details">Session info</button>
+  <span class="hint" id="hint">Click to tap · drag to swipe</span>
+</footer>
+
+<div class="keyboard-tray" id="keyboard-tray" hidden>
+  <label for="kb-input">Keyboard → simulator</label>
+  <input id="kb-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type here; Enter sends a return key">
+  <button type="button" class="btn" id="btn-send-return">Return</button>
+</div>
+
+<dialog id="session-dialog">
+  <h2>Session information</h2>
+  <dl id="session-list"></dl>
+  <p class="dialog-note" id="session-note"></p>
+  <form method="dialog"><button class="btn primary">Close</button></form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

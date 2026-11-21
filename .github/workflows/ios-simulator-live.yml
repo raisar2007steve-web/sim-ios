@@ -1,0 +1,112 @@
+name: iOS Simulator Live
+
+# Manual only: this boots a real macOS runner, a simulator and a public tunnel,
+# so it must never run on ordinary pushes.
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Simulator device name (blank = newest available iPhone)'
+        required: false
+        default: ''
+      duration_minutes:
+        description: 'Session duration in minutes (1-240)'
+        required: false
+        default: '30'
+      frame_rate:
+        description: 'Target stream frame rate (1-15)'
+        required: false
+        default: '6'
+      run_tests:
+        description: 'Run unit/UI tests when the scheme supports them'
+        required: false
+        type: boolean
+        default: false
+      install_input_driver:
+        description: 'Install touch/keyboard injection tooling'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Live iOS Simulator session
+    runs-on: macos-latest
+    timeout-minutes: 280
+    env:
+      SESSION_DIR: ${{ github.workspace }}/.session
+      ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+      PORT: '8080'
+      FRAME_WIDTH: '750'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate inputs and create session
+        env:
+          INPUT_DURATION: ${{ inputs.duration_minutes }}
+          INPUT_FPS: ${{ inputs.frame_rate }}
+          INPUT_DEVICE: ${{ inputs.device }}
+        run: bash scripts/ios-simulator/init-session.sh
+
+      - name: Detect macOS, Xcode and simulator runtimes
+        run: bash scripts/ios-simulator/detect-environment.sh
+
+      - name: Select and boot iPhone simulator
+        run: bash scripts/ios-simulator/boot-simulator.sh
+
+      - name: Build, install and launch application
+        env:
+          INPUT_RUN_TESTS: ${{ inputs.run_tests }}
+        run: bash scripts/ios-simulator/build-and-launch.sh
+
+      - name: Install input driver tooling
+        env:
+          INPUT_INSTALL_DRIVER: ${{ inputs.install_input_driver }}
+        run: bash scripts/ios-simulator/setup-input-driver.sh
+
+      - name: Start streaming server
+        run: bash scripts/ios-simulator/start-viewer.sh
+
+      - name: Start HTTPS tunnel
+        env:
+          CLOUDFLARED_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARED_TUNNEL_TOKEN }}
+          TUNNEL_HOSTNAME: ${{ secrets.TUNNEL_HOSTNAME }}
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: bash scripts/ios-simulator/start-tunnel.sh
+
+      - name: Verify endpoint, authentication, stream and input
+        run: bash scripts/ios-simulator/verify-session.sh
+
+      - name: Publish connection info and keep session alive
+        run: bash scripts/ios-simulator/keepalive.sh
+
+      - name: Write final summary
+        if: always()
+        run: bash scripts/ios-simulator/write-summary.sh
+
+      - name: Cleanup simulator, services and credentials
+        if: always()
+        run: bash scripts/ios-simulator/cleanup.sh
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-diagnostics
+          path: |
+            artifacts/
+            .session/capability.json
+            .session/session.json
+            .session/stream-check.json
+            .session/closed.json
+          if-no-files-found: warn
+          retention-days: 7
