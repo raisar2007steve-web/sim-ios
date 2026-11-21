@@ -159,9 +159,11 @@ class AxeDriver {
 /* --------------------------------------------------------- AppleScript --- */
 
 class AppleDriver {
-  constructor() {
+  constructor(udid = '') {
     this.name = 'applescript';
+    this.udid = udid;
     this.bounds = null;
+    this.boundsAt = 0;
     // Device point size, used to map device coordinates onto the on-screen
     // Simulator window (which is scaled to whatever the runner's display is).
     this.deviceSize = null;
@@ -192,7 +194,8 @@ class AppleDriver {
     }
     return { ok: true, detail: `Simulator window at ${r.x},${r.y} ${r.width}x${r.height}` };
   }
-  async windowBounds() {
+  /** Read the Simulator window rectangle straight from the accessibility API. */
+  async readBounds() {
     const r = await this.osa([
       'tell application "System Events"',
       '  tell process "Simulator"',
@@ -205,13 +208,48 @@ class AppleDriver {
     if (!r.ok) return null;
     const parts = r.stdout.trim().split(',').map(Number);
     if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return null;
-    // The device screen sits below the window title bar.
-    const TITLE = 28;
-    return { x: parts[0], y: parts[1] + TITLE, width: parts[2], height: Math.max(1, parts[3] - TITLE) };
+    // Derive the title-bar height from the window/device aspect ratio instead of
+    // assuming a fixed chrome size: the window is wider than the screen is tall
+    // only by whatever chrome it has.
+    const dw = this.deviceSize ? this.deviceSize.width : 440;
+    const dh = this.deviceSize ? this.deviceSize.height : 956;
+    const winH = parts[3];
+    const contentH = Math.min(winH, Math.round(parts[2] * (dh / dw)));
+    const chrome = Math.max(0, winH - contentH);
+    return { x: parts[0], y: parts[1] + chrome, width: parts[2], height: Math.max(1, contentH) };
+  }
+  /**
+   * Bounds with recovery: a long session can lose the Simulator window (app
+   * closed, device switch, display change), so reopen the app and retry rather
+   * than failing every tap with "window unavailable".
+   */
+  async windowBounds(force = false) {
+    if (!force && this.bounds && Date.now() - this.boundsAt < 2000) return this.bounds;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const b = await this.readBounds();
+      if (b && b.width > 10 && b.height > 10) {
+        this.bounds = b;
+        this.boundsAt = Date.now();
+        return b;
+      }
+      const args = ['-a', 'Simulator'];
+      if (this.udid) args.push('--args', '-CurrentDeviceUDID', this.udid);
+      await run('open', args, 10000);
+      await run(APPLE_SCRIPT, ['-e', 'tell application "Simulator" to activate'], 8000);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    this.bounds = null;
+    return null;
   }
   async click(deviceX, deviceY) {
-    const b = await this.windowBounds();
-    if (!b) return { ok: false, code: 1, stderr: 'Simulator window unavailable' };
+    const b = await this.windowBounds(true);
+    if (!b) {
+      return {
+        ok: false,
+        code: 1,
+        stderr: 'Simulator window unavailable: the app could not be opened on this runner (no GUI session or Accessibility permission missing)',
+      };
+    }
     const pt = this.toScreen(b, deviceX, deviceY);
     const cliclick = await which('cliclick');
     if (cliclick) {
@@ -229,8 +267,14 @@ class AppleDriver {
     return this.click(x, y);
   }
   async swipe(x1, y1, x2, y2) {
-    const b = await this.windowBounds();
-    if (!b) return { ok: false, code: 1, stderr: 'Simulator window unavailable' };
+    const b = await this.windowBounds(true);
+    if (!b) {
+      return {
+        ok: false,
+        code: 1,
+        stderr: 'Simulator window unavailable: the app could not be opened on this runner (no GUI session or Accessibility permission missing)',
+      };
+    }
     const cliclick = await which('cliclick');
     if (!cliclick) return { ok: false, code: 1, stderr: 'cliclick not installed; swipe needs cliclick' };
     const from = this.toScreen(b, x1, y1);
@@ -290,7 +334,7 @@ async function createDriver({ udid, preferred } = {}) {
   const candidates = [];
   if (!preferred || preferred === 'idb') candidates.push(() => new IdbDriver(udid));
   if (!preferred || preferred === 'axe') candidates.push(() => new AxeDriver(udid));
-  if (!preferred || preferred === 'applescript') candidates.push(() => new AppleDriver());
+  if (!preferred || preferred === 'applescript') candidates.push(() => new AppleDriver(udid));
 
   const attempts = [];
   for (const make of candidates) {
