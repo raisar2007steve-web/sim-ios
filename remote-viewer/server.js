@@ -145,6 +145,7 @@ function status() {
       frameSeq: state.frameSeq,
       lastFrameAt: state.lastFrameAt,
       lastFrameBytes: state.lastFrameBytes,
+      captureMs: state.lastCaptureMs || null,
       captureErrors: state.captureErrors,
       lastCaptureError: state.lastCaptureError,
     },
@@ -257,6 +258,8 @@ async function captureLoop() {
       }
     }
     const elapsed = Date.now() - started;
+    // Exposed so the achieved frame rate can be measured instead of guessed.
+    state.lastCaptureMs = elapsed;
     await new Promise((r) => setTimeout(r, Math.max(50, interval - elapsed)));
   }
 }

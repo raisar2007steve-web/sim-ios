@@ -444,11 +444,15 @@ body:fullscreen .keyboard-tray { display: none; }
     gap: 8px;
     padding: 10px 12px 10px;
   }
+  /* The stage must own the flexible row; auto-placement would otherwise give
+     the first row to the rail and shrink the device to the leftover space. */
+  .stage { grid-row: 1; }
   .rail {
+    grid-row: 2;
     flex-direction: row;
     justify-content: center;
     flex-wrap: nowrap;
-    align-self: stretch;
+    align-self: end;
     gap: 2px;
     padding: 6px;
     border-radius: 20px;
