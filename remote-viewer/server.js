@@ -214,12 +214,25 @@ async function detectPointSize() {
   }
 }
 
+// Calling the resolved simctl binary skips an `xcrun` lookup on every frame,
+// which is a measurable part of the per-frame cost.
+let SIMCTL_IO = 'xcrun simctl io';
+
+async function resolveSimctl() {
+  const r = await execSh('xcrun --find simctl');
+  const found = r.ok ? r.stdout.trim().split('\n')[0] : '';
+  if (found && found.startsWith('/')) {
+    SIMCTL_IO = `${JSON.stringify(found)} io`;
+    console.log('[stream] simctl resolved to ' + found);
+  }
+}
+
 async function captureOnce() {
   if (MOCK) return null;
   const raw = path.join(TMP, 'frame-raw.jpg');
   const out = path.join(TMP, 'frame.jpg');
   const r = await execSh(
-    `xcrun simctl io ${JSON.stringify(UDID)} screenshot --type=jpeg ${JSON.stringify(raw)} && ` +
+    `${SIMCTL_IO} ${JSON.stringify(UDID)} screenshot --type=jpeg ${JSON.stringify(raw)} && ` +
       `sips -s format jpeg -s formatOptions 62 --resampleWidth ${FRAME_WIDTH} ${JSON.stringify(raw)} --out ${JSON.stringify(out)} >/dev/null`,
     30000
   );
@@ -487,6 +500,8 @@ async function main() {
   } else {
     console.log('[stream] SIM_MOCK=1 - demo screen only, no simulator attached');
   }
+
+  await resolveSimctl();
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[http] listening on 0.0.0.0:${PORT} (auth ${TOKEN ? 'required' : 'DISABLED'}, mock=${MOCK})`);
