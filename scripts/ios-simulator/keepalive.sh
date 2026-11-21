@@ -36,10 +36,12 @@ mkdir -p "$HEARTBEAT_DIR" 2>/dev/null || true
 push_heartbeat() {
   command -v git >/dev/null 2>&1 || return 1
   [[ -d "$REPO_ROOT/.git" ]] || return 1
-  if git -C "$REPO_ROOT" diff --quiet -- "$HEARTBEAT_FILE" 2>/dev/null; then
+  # Stage first: a brand-new file is "unchanged" to `git diff`, and the log is
+  # force-added because session logs are excluded from normal commits.
+  git -C "$REPO_ROOT" add -f "$HEARTBEAT_FILE" >/dev/null 2>&1 || return 1
+  if git -C "$REPO_ROOT" diff --cached --quiet -- "$HEARTBEAT_FILE" 2>/dev/null; then
     return 0
   fi
-  git -C "$REPO_ROOT" add -f "$HEARTBEAT_FILE" >/dev/null 2>&1 || return 1
   if ! git -C "$REPO_ROOT" -c user.name="github-actions[bot]" \
       -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
       commit -q -m "session heartbeat: run ${GITHUB_RUN_ID:-local}" >/dev/null 2>&1; then

@@ -4,4 +4,5 @@ build/
 remote-viewer/node_modules/
 .DS_Store
 *.log
+!session-logs/*.log
 .sim-state/
