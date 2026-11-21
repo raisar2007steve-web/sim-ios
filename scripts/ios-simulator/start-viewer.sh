@@ -37,6 +37,7 @@ SESSION_TOKEN="$SESSION_TOKEN" \
 FRAME_FPS="${FRAME_FPS:-6}" \
 FRAME_WIDTH="${FRAME_WIDTH:-750}" \
 PUBLIC_URL="$(state_get PUBLIC_URL "")" \
+STATE_RESTORE="$(state_get STATE_RESTORE "")" \
 INPUT_DRIVER="${INPUT_DRIVER:-}" \
 nohup node server.js > "$ARTIFACTS_DIR/viewer.log" 2>&1 &
 VIEWER_PID=$!

@@ -132,6 +132,39 @@ README.md                this file
 SECURITY.md              access model and credential handling
 ```
 
+## Persistent device state (save and resume)
+
+A GitHub-hosted runner is destroyed after the job, so the simulator is saved off
+the runner and restored into the **same device** on the next session:
+
+- `scripts/ios-simulator/save-state.sh` shuts the device down and archives
+  `~/Library/Developer/CoreSimulator/Devices/<UDID>` (OS state, every app
+  container, preferences) into `$RUNNER_TEMP/sim-state/device-state.tar.gz`,
+  with disposable caches, logs and tmp excluded. It also writes
+  `state-marker.txt` into the app's data container.
+- The workflow persists that directory with `actions/cache/save` under the fixed
+  prefix `ios-sim-state-`, and restores the newest matching entry with
+  `actions/cache/restore` (`restore-keys: ios-sim-state-`) before booting.
+- `scripts/ios-simulator/restore-state.sh` unpacks the archive back into the
+  simulator directory and hands the saved UDID to `boot-simulator.sh`, which
+  boots that device instead of creating a new one.
+- `build-and-launch.sh` looks for `state-marker.txt` in the app container and
+  reports `Restored app data: yes (saved-by-run …)` in the job summary, so the
+  restore is proven rather than assumed.
+
+All state lives in one fixed place (the repository's Actions cache under
+`ios-sim-state-`), so every run resumes the most recent device. Set
+`persist_state: false` to start clean. Notes:
+
+- Caches are keyed by runner OS and the archive is skipped above 4.5 GB; a saved
+  device that this Xcode/runtime set cannot see is ignored with a warning and a
+  fresh device is used instead, so a stale state never breaks a session.
+- Simulator app data can contain personal or secret material. On a **public**
+  repository, Actions caches are readable by anyone with repository read access —
+  keep credentials out of the simulator, or use a private repository.
+- Cache entries are immutable: each run writes a new key and restoration picks the
+  newest prefixed entry, which is what makes "resume where you left off" work.
+
 ## Local preview of the viewer UI
 
 The viewer runs without a simulator, rendering a clearly-labelled demo screen:

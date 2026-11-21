@@ -129,6 +129,7 @@ function status() {
       udid: UDID,
       iosVersion: info.ios,
       app: info.app,
+      state: process.env.STATE_RESTORE || '',
       pointSize: state.pointSize,
     },
     host: { macos: info.macos, xcode: info.xcode },

@@ -13,6 +13,33 @@ export DEVELOPER_DIR="${XCODE_PATH:-$(xcode-select -p)}"
 
 DEVICES_JSON="$(xcrun simctl list devices available -j)"
 
+# A restored device from a previous session wins: same UDID, same app data.
+if [[ -n "${RESTORED_UDID:-}" ]]; then
+  RESTORED_NAME="$(printf '%s\n' "$DEVICES_JSON" | python3 -c '
+import json, sys
+udid = sys.argv[1] if len(sys.argv) > 1 else ""
+data = json.load(sys.stdin)
+for runtime, devices in data.get("devices", {}).items():
+    for device in devices:
+        if device.get("udid") == udid:
+            print(device.get("name", "Restored iPhone"))
+            raise SystemExit(0)
+' "$RESTORED_UDID")"
+  if [[ -n "$RESTORED_NAME" ]]; then
+    log "Resuming saved device $RESTORED_NAME ($RESTORED_UDID)"
+    UDID="$RESTORED_UDID"
+    DEVICE_NAME="$RESTORED_NAME"
+    state_set UDID "$UDID"
+    state_set DEVICE_NAME "$DEVICE_NAME"
+    state_set DEVICE_MODEL "$DEVICE_NAME"
+    state_set DEVICE_ORIGIN "restored"
+    PICK="$UDID"$'\t'"$DEVICE_NAME"$'\t'restored
+  else
+    warn "Saved device $RESTORED_UDID is not available on this runner; selecting a fresh device."
+  fi
+fi
+
+if [[ -z "${PICK:-}" ]]; then
 PICK="$(printf '%s\n' "$DEVICES_JSON" | REQUESTED="$REQUESTED_DEVICE" RUNTIME="$IOS_RUNTIME_ID" python3 -c '
 import json, os, re, sys
 
@@ -74,8 +101,10 @@ print(types[0]["name"] if types else "iPhone")
     || fail_step "Could not create a simulator device. No compatible iPhone device for $IOS_RUNTIME_ID."
   PICK="$NEW_UDID"$'\t'"$DEVICE_NAME_TO_CREATE"$'\t'"Shutdown"
 fi
+fi
 
 IFS=$'\t' read -r UDID DEVICE_NAME DEVICE_STATE <<< "$PICK"
+state_set DEVICE_ORIGIN "$(state_get DEVICE_ORIGIN fresh)"
 state_set UDID "$UDID"
 state_set DEVICE_NAME "$DEVICE_NAME"
 state_set DEVICE_MODEL "$DEVICE_NAME"

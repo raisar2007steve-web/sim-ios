@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: true
+      persist_state:
+        description: 'Save the simulator device state and resume it next run'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
       ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       PORT: '8080'
       FRAME_WIDTH: '750'
+      SIM_STATE_DIR: ${{ runner.temp }}/sim-state
 
     steps:
       - name: Check out repository
@@ -59,6 +65,20 @@ jobs:
 
       - name: Detect macOS, Xcode and simulator runtimes
         run: bash scripts/ios-simulator/detect-environment.sh
+
+      - name: Restore saved simulator state
+        if: inputs.persist_state
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/sim-state
+          key: ios-sim-state-${{ github.run_id }}
+          restore-keys: |
+            ios-sim-state-
+
+      - name: Apply saved simulator state
+        env:
+          INPUT_PERSIST_STATE: ${{ inputs.persist_state }}
+        run: bash scripts/ios-simulator/restore-state.sh
 
       - name: Select and boot iPhone simulator
         run: bash scripts/ios-simulator/boot-simulator.sh
@@ -100,6 +120,19 @@ jobs:
 
       - name: Keep session alive until expiry
         run: bash scripts/ios-simulator/keepalive.sh
+
+      - name: Save simulator state
+        if: always()
+        env:
+          INPUT_PERSIST_STATE: ${{ inputs.persist_state }}
+        run: bash scripts/ios-simulator/save-state.sh
+
+      - name: Persist simulator state for the next run
+        if: always() && inputs.persist_state
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/sim-state
+          key: ios-sim-state-${{ github.run_id }}
 
       - name: Write final summary
         if: always()

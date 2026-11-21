@@ -307,6 +307,7 @@ function renderSession(s) {
     ['Device UDID', s.device ? s.device.udid || '—' : '—'],
     ['iOS runtime', s.device ? s.device.iosVersion : '—'],
     ['App', s.device && s.device.app ? s.device.app : '—'],
+    ['Device state', s.device && s.device.state ? s.device.state : 'fresh'],
     ['macOS runner', s.host ? s.host.macos : '—'],
     ['Xcode', s.host ? s.host.xcode : '—'],
     ['Stream', `${s.stream ? s.stream.fps : 0} fps target · ${s.stream ? s.stream.frameSeq : 0} frames`],

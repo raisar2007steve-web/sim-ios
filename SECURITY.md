@@ -72,6 +72,19 @@ anyone you share it with) can access the session. Treat the URL as a credential.
 - Set `install_input_driver: false` when you only need to watch the screen — a
   view-only session cannot be operated remotely.
 
+## Saved device state
+
+- With `persist_state` enabled, the simulator device directory (app containers,
+  preferences, OS state) is archived and stored in the repository's Actions
+  cache under `ios-sim-state-`. It is restored by the next run.
+- That archive can contain anything you put into the simulator: account tokens,
+  test data, screenshots, saved passwords in Safari. Treat it as sensitive.
+- Actions caches on a **public** repository are readable by anyone with
+  repository read access. Do not keep credentials in the simulator on a public
+  repository, or keep the repository private.
+- Expired or deleted caches remove the saved state; the workflow never fails
+  because state is missing — it starts a fresh device instead.
+
 ## What this is not
 
 - Not a multi-tenant service: the runner is destroyed after the job, and nothing

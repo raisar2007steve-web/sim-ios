@@ -193,6 +193,19 @@ sleep 4
 if xcrun simctl io "$UDID" screenshot "$ARTIFACTS_DIR/app-screen.png" >/dev/null 2>&1; then
   log "Captured post-launch screenshot: artifacts/app-screen.png"
 fi
+
+# If this run resumed a saved device, prove the app data actually came back.
+APP_DATA="$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)"
+if [[ -n "$APP_DATA" && -f "$APP_DATA/state-marker.txt" ]]; then
+  MARKER="$(head -n 1 "$APP_DATA/state-marker.txt")"
+  state_set STATE_RESTORED_DATA "yes"
+  state_set STATE_MARKER "$MARKER"
+  log "Restored app data verified: $MARKER"
+  summary_md ""
+  summary_md "**Restored app data:** marker from a previous session found in the app container (\`$MARKER\`)."
+else
+  state_set STATE_RESTORED_DATA "no"
+fi
 # Confirm the process is still alive a few seconds after launch.
 if ! xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID"; then
   warn "Application is not listed in launchctl after launch; it may have crashed."
