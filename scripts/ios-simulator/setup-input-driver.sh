@@ -24,9 +24,18 @@ install_idb() {
       warn "idb_companion could not be installed (see artifacts/install-idb.log)"; return 1; }
   fi
   if ! command -v idb >/dev/null 2>&1; then
-    python3 -m pip install --user --quiet fb-idb >>"$ARTIFACTS_DIR/install-idb.log" 2>&1 || {
-      warn "fb-idb client could not be installed"; return 1; }
+    # Homebrew Python is PEP 668 "externally managed"; use pipx when present and
+    # fall back to an isolated user install.
+    if command -v pipx >/dev/null 2>&1; then
+      pipx install fb-idb >>"$ARTIFACTS_DIR/install-idb.log" 2>&1 || true
+    fi
   fi
+  if ! command -v idb >/dev/null 2>&1; then
+    python3 -m pip install --user --break-system-packages --quiet fb-idb \
+      >>"$ARTIFACTS_DIR/install-idb.log" 2>&1 || {
+      warn "fb-idb client could not be installed (see artifacts/install-idb.log)"; return 1; }
+  fi
+  export PATH="$HOME/Library/Python/$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')/bin:$HOME/.local/bin:$PATH"
   command -v idb >/dev/null 2>&1 || return 1
   log "idb tooling installed: $(command -v idb)"
 }

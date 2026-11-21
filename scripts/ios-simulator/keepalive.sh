@@ -10,11 +10,18 @@ BASE="${PUBLIC_URL%/}"
 ACCESS_URL="${BASE}/?token=${SESSION_TOKEN}"
 EXPIRES_AT="${SESSION_EXPIRES_AT:-}"
 
+# The access URL carries the session token. It is published in the job summary
+# (the primary channel) and in this short-lived artifact so the session can be
+# picked up by whoever dispatched the run. Both expire with the run.
+cat > "$ARTIFACTS_DIR/session-access.txt" <<EOF
+$ACCESS_URL
+expires: $EXPIRES_AT
+EOF
+
 cat > "$ARTIFACTS_DIR/session-info.txt" <<EOF
 Remote iOS Simulator session
 Viewer host: $BASE
-Note       : open the URL from the job summary (it carries the session token,
-             which is deliberately not written into artifacts)
+Access URL : see session-access.txt or the job summary (carries the token)
 Expires    : $EXPIRES_AT
 Device     : ${DEVICE_NAME:-unknown} (iOS ${IOS_VERSION:-unknown})
 Xcode      : ${XCODE_VERSION:-unknown}

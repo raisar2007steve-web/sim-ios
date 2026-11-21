@@ -92,6 +92,7 @@ async function shot(tag) {
   })();
 
   capability.pointSize = pointSize;
+  if (typeof driver.setDeviceSize === 'function') driver.setDeviceSize(pointSize);
 
   const before = await shot('before');
   const gesture = await driver.swipe(pointSize.width * 0.5, pointSize.height * 0.97,

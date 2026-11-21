@@ -66,7 +66,8 @@ GitHub Actions (macos-latest)
    | `NGROK_AUTHTOKEN` | Fall back to ngrok if Cloudflare is unavailable |
 3. Actions → **iOS Simulator Live** → *Run workflow*.
 4. Wait for the *Publish connection info and keep session alive* step; the URL is
-   in the run's **Summary** tab (it includes the session token).
+   in the run's **Summary** tab (it includes the session token) and in the
+   `ios-simulator-diagnostics` artifact as `session-access.txt`.
 5. Open it on any device. The session ends automatically when the run ends.
 
 ### Workflow inputs

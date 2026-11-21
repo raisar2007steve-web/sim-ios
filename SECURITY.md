@@ -27,9 +27,12 @@ browser somewhere on the internet. That is deliberate, and it is scoped.
 - The WebSocket upgrade is authenticated *before* the handshake completes;
   unauthenticated upgrades get `401`.
 - The workflow registers the token with `::add-mask::`, so it cannot appear in
-  workflow logs. It is written to the job summary and `artifacts/session-info.txt`
-  because that is how you retrieve it, and both are visible only to people who
-  can already read the repository's Actions output.
+  workflow logs. It is written to the job summary and to
+  `artifacts/session-access.txt` (uploaded with the run's diagnostics artifact)
+  because that is how you retrieve the URL; both are reachable only by people
+  who can read the repository's Actions output. **On a public repository, Actions
+  output is public**, so treat a session on a public repo as publicly viewable
+  for the duration of the run.
 - Unauthenticated requests are checked during verification: the run **fails**
   if `/` does not return `401` without a token.
 

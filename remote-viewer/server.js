@@ -450,6 +450,9 @@ async function main() {
     console.log('[input] driver=' + driver.name + (reason ? ` (${reason})` : ''));
     console.log('[input] attempts=' + JSON.stringify(attempts));
     state.pointSize = await detectPointSize();
+    if (state.pointSize && typeof driver.setDeviceSize === 'function') {
+      driver.setDeviceSize(state.pointSize);
+    }
     console.log('[device] point size=' + JSON.stringify(state.pointSize));
   } else {
     console.log('[stream] SIM_MOCK=1 - demo screen only, no simulator attached');

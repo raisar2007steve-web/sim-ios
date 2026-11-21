@@ -162,6 +162,22 @@ class AppleDriver {
   constructor() {
     this.name = 'applescript';
     this.bounds = null;
+    // Device point size, used to map device coordinates onto the on-screen
+    // Simulator window (which is scaled to whatever the runner's display is).
+    this.deviceSize = null;
+  }
+  setDeviceSize(size) {
+    if (size && size.width > 0 && size.height > 0) {
+      this.deviceSize = { width: size.width, height: size.height };
+    }
+  }
+  toScreen(bounds, x, y) {
+    const dw = this.deviceSize ? this.deviceSize.width : 440;
+    const dh = this.deviceSize ? this.deviceSize.height : 956;
+    return {
+      x: Math.round(bounds.x + (x / dw) * bounds.width),
+      y: Math.round(bounds.y + (y / dh) * bounds.height),
+    };
   }
   async osa(lines) {
     const args = [];
@@ -193,18 +209,19 @@ class AppleDriver {
     const TITLE = 28;
     return { x: parts[0], y: parts[1] + TITLE, width: parts[2], height: Math.max(1, parts[3] - TITLE) };
   }
-  async click(px, py) {
+  async click(deviceX, deviceY) {
     const b = await this.windowBounds();
     if (!b) return { ok: false, code: 1, stderr: 'Simulator window unavailable' };
+    const pt = this.toScreen(b, deviceX, deviceY);
     const cliclick = await which('cliclick');
     if (cliclick) {
-      const r = await run(cliclick, ['c:' + Math.round(b.x + px), ',' + Math.round(b.y + py)]);
+      const r = await run(cliclick, ['c:' + pt.x, ',' + pt.y]);
       if (r.ok) return r;
     }
     return this.osa([
       'tell application "Simulator" to activate',
       'tell application "System Events"',
-      `  click at {${Math.round(b.x + px)}, ${Math.round(b.y + py)}}`,
+      `  click at {${pt.x}, ${pt.y}}`,
       'end tell',
     ]);
   }
@@ -216,14 +233,16 @@ class AppleDriver {
     if (!b) return { ok: false, code: 1, stderr: 'Simulator window unavailable' };
     const cliclick = await which('cliclick');
     if (!cliclick) return { ok: false, code: 1, stderr: 'cliclick not installed; swipe needs cliclick' };
-    const steps = 12;
-    const lines = [`${Math.round(b.x + x1)},${Math.round(b.y + y1)}`];
+    const from = this.toScreen(b, x1, y1);
+    const to = this.toScreen(b, x2, y2);
+    const steps = 14;
+    const lines = [`dd:${from.x},${from.y}`];
     for (let i = 1; i <= steps; i += 1) {
       const t = i / steps;
-      lines.push(`dd:${Math.round(b.x + x1 + (x2 - x1) * t)},${Math.round(b.y + y1 + (y2 - y1) * t)}`);
-      lines.push('w:12');
+      lines.push(`dm:${Math.round(from.x + (to.x - from.x) * t)},${Math.round(from.y + (to.y - from.y) * t)}`);
+      lines.push('w:10');
     }
-    lines.push('du:' + `${Math.round(b.x + x2)},${Math.round(b.y + y2)}`);
+    lines.push(`du:${to.x},${to.y}`);
     return run(cliclick, lines);
   }
   text(txt) {
