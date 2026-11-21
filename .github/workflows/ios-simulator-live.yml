@@ -86,7 +86,19 @@ jobs:
       - name: Verify endpoint, authentication, stream and input
         run: bash scripts/ios-simulator/verify-session.sh
 
-      - name: Publish connection info and keep session alive
+      - name: Publish session access URL
+        run: bash scripts/ios-simulator/publish-session.sh
+
+      - name: Upload access URL (available during the session)
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-access
+          path: artifacts/session-access.txt
+          if-no-files-found: ignore
+          retention-days: 1
+          overwrite: true
+
+      - name: Keep session alive until expiry
         run: bash scripts/ios-simulator/keepalive.sh
 
       - name: Write final summary

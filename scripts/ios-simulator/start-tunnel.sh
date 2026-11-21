@@ -56,15 +56,54 @@ extract_url() {
   printf '%s' "${found%/}"
 }
 
+# doh_resolve HOST -> first A record, resolved over DNS-over-HTTPS.
+# Brand-new quick-tunnel hostnames are sometimes not resolvable from the runner
+# for a while (stale/negative DNS cache); asking Cloudflare or Google directly
+# over HTTPS avoids that. The hostname itself is authoritative at Cloudflare, so
+# it resolves normally for the browser that opens the URL.
+doh_resolve() {
+  local host="$1" ip=""
+  for resolver in "https://cloudflare-dns.com/dns-query" "https://dns.google/resolve"; do
+    ip="$(curl -s -m 8 -H 'accept: application/dns-json' "${resolver}?name=${host}&type=A" 2>/dev/null \
+      | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+for answer in data.get("Answer", []):
+    if answer.get("type") == 1:
+        print(answer["data"])
+        break
+' 2>/dev/null || true)"
+    if [[ -n "$ip" ]]; then
+      printf '%s' "$ip"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # wait_for_endpoint URL TIMEOUT_SECONDS
 # Polls the public health endpoint until it answers 200. A freshly created
-# quick tunnel often returns 000/502 for the first seconds while Cloudflare
-# finishes routing, so this is a single combined wait instead of two phases.
+# quick tunnel is often unreachable for the first seconds while Cloudflare
+# finishes routing, so URL discovery and health polling happen together.
 wait_for_endpoint() {
-  local url="$1" timeout="${2:-120}" deadline code seen=""
+  local url="$1" timeout="${2:-120}" deadline code seen="" host doh_ip=""
   deadline=$(( $(date -u +%s) + timeout ))
+  host="${url#https://}"
   while (( $(date -u +%s) < deadline )); do
     code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$url/api/health" 2>/dev/null || true)"
+    if [[ "$code" == "000" || -z "$code" ]]; then
+      # The runner's resolver may not know the fresh hostname yet.
+      if [[ -z "$doh_ip" ]]; then
+        doh_ip="$(doh_resolve "$host" || true)"
+        diag "DoH $host -> ${doh_ip:-unresolved}"
+      fi
+      if [[ -n "$doh_ip" ]]; then
+        code="$(curl -s -o /dev/null -m 10 --resolve "${host}:443:${doh_ip}" -w '%{http_code}' "$url/api/health" 2>/dev/null || true)"
+      fi
+    fi
     if [[ "$code" != "$seen" ]]; then
       diag "health $url -> ${code:-no-response}"
       seen="$code"
@@ -118,6 +157,15 @@ try_cloudflared_quick() {
   fi
   diag "quick tunnel URL: $url"
   if wait_for_endpoint "$url" 150; then
+    printf '%s' "$url"
+    return 0
+  fi
+  # The connector is up but this runner cannot reach its own edge hostname.
+  # The URL still works from a normal network, so hand it back marked as
+  # externally unverified rather than throwing away a live tunnel.
+  if grep -q 'Registered tunnel connection' "$TUNNEL_LOG" 2>/dev/null; then
+    diag "connector registered but the runner cannot reach $url; publishing it as externally unverified"
+    state_set PUBLIC_ENDPOINT "unverified-from-runner"
     printf '%s' "$url"
     return 0
   fi
@@ -239,7 +287,9 @@ fi
 
 state_set PUBLIC_URL "$PUBLIC_URL"
 state_set TUNNEL_STATUS "running"
-state_set PUBLIC_ENDPOINT "reachable"
+if [[ -z "$(state_get PUBLIC_ENDPOINT "")" ]]; then
+  state_set PUBLIC_ENDPOINT "reachable"
+fi
 printf 'provider: %s\nurl: %s\n' "$(state_get TUNNEL_KIND)" "$PUBLIC_URL" >> "$DIAG_FILE"
 log "Tunnel ready: $PUBLIC_URL"
 exit 0
