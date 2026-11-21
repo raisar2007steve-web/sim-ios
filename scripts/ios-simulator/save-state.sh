@@ -73,6 +73,7 @@ printf '{"udid":"%s","deviceName":"%s","iosVersion":"%s","xcode":"%s","savedAt":
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${BUNDLE_ID:-}" > "$STATE_DIR/state-meta.json"
 
 state_set STATE_SAVE "saved (${SIZE_MB} MB)"
+echo "state_saved: ${SIZE_MB} MB ($UDID)" >> "$ARTIFACTS_DIR/state-status.txt"
 state_set STATE_SAVED_UDID "$UDID"
 log "Saved device state: $STATE_DIR/device-state.tar.gz (${SIZE_MB} MB)"
 

@@ -206,6 +206,14 @@ if [[ -n "$APP_DATA" && -f "$APP_DATA/state-marker.txt" ]]; then
 else
   state_set STATE_RESTORED_DATA "no"
 fi
+
+{
+  echo "state_restore: $(state_get STATE_RESTORE "unknown")"
+  echo "device_origin: $(state_get DEVICE_ORIGIN "fresh")"
+  echo "restored_data: $(state_get STATE_RESTORED_DATA "no")"
+  echo "marker: $(state_get STATE_MARKER "")"
+  echo "device: ${DEVICE_NAME:-unknown} ${UDID:-}"
+} > "$ARTIFACTS_DIR/state-status.txt"
 # Confirm the process is still alive a few seconds after launch.
 if ! xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID"; then
   warn "Application is not listed in launchctl after launch; it may have crashed."
