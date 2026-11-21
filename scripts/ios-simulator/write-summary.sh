@@ -31,7 +31,11 @@ summary_row "Authentication" "${AUTH_STATUS:-not verified}"
 summary_row "Live stream" "${STREAM_STATUS:-not verified}"
 summary_row "Input driver" "${INPUT_DRIVER:-none}"
 summary_row "Touch injection" "${TOUCH_STATUS:-unknown}"
-summary_row "Session ended" "${SESSION_EXPIRES_AT:-unknown}"
+if [[ "${SESSION_UNLIMITED:-no}" == "yes" ]]; then
+  summary_row "Session ended" "when the run was cancelled"
+else
+  summary_row "Session ended" "${SESSION_EXPIRES_AT:-unknown}"
+fi
 summary_md ""
 
 if [[ -n "$ACCESS_URL" ]]; then

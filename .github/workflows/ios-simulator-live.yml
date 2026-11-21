@@ -10,9 +10,9 @@ on:
         required: false
         default: ''
       duration_minutes:
-        description: 'Session duration in minutes (1-240)'
+        description: 'Session length: 0 = keep it live until the run is cancelled, or 1-240 minutes'
         required: false
-        default: '30'
+        default: '0'
       frame_rate:
         description: 'Target stream frame rate (1-15)'
         required: false
@@ -34,7 +34,8 @@ on:
         default: true
 
 permissions:
-  contents: read
+  # write is only used to push the session heartbeat log to session-logs/.
+  contents: write
 
 concurrency:
   group: ios-simulator-live
@@ -44,7 +45,7 @@ jobs:
   live:
     name: Live iOS Simulator session
     runs-on: macos-latest
-    timeout-minutes: 280
+    timeout-minutes: 350
     env:
       SESSION_DIR: ${{ github.workspace }}/.session
       ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
@@ -118,7 +119,9 @@ jobs:
           retention-days: 1
           overwrite: true
 
-      - name: Keep session alive until expiry
+      - name: Keep session alive until cancelled (heartbeat pushed to session-logs/)
+        env:
+          HEARTBEAT_PUSH_MINUTES: '5'
         run: bash scripts/ios-simulator/keepalive.sh
 
       - name: Save simulator state

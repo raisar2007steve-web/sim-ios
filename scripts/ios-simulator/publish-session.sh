@@ -12,7 +12,11 @@ ACCESS_URL=""
 if [[ -n "$BASE" && -n "${SESSION_TOKEN:-}" ]]; then
   ACCESS_URL="${BASE%/}/?token=${SESSION_TOKEN}"
 fi
-EXPIRES_AT="${SESSION_EXPIRES_AT:-unknown}"
+if [[ "${SESSION_UNLIMITED:-no}" == "yes" ]]; then
+  EXPIRES_AT="when the run is cancelled"
+else
+  EXPIRES_AT="${SESSION_EXPIRES_AT:-unknown}"
+fi
 ENDPOINT_STATE="$(state_get PUBLIC_ENDPOINT "unknown")"
 
 if [[ -z "$ACCESS_URL" ]]; then

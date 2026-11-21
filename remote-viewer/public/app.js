@@ -46,6 +46,7 @@ let lastFrameAt = 0;
 let pendingBitmap = false;
 let viewRotated = false;
 let closeRequested = false;
+let failedAttempts = 0;
 const mock = { active: false, start: performance.now(), taps: [] };
 
 /* ------------------------------------------------------------ device fit --- */
@@ -266,6 +267,7 @@ function connect() {
 
   ws.addEventListener('open', () => {
     opened = true;
+    failedAttempts = 0;
     reconnectDelay = 800;
     setStatus('live', 'Connected');
     loadStatus();
@@ -293,10 +295,14 @@ function connect() {
 
   ws.addEventListener('close', () => {
     if (closeRequested) return;
-    setStatus('error', 'Disconnected');
+    failedAttempts += 1;
+    const expired = failedAttempts >= 3;
+    setStatus('error', expired ? 'Session ended' : 'Disconnected');
     el.overlay.hidden = false;
-    el.overlayTitle.textContent = 'Stream disconnected';
-    el.overlayBody.textContent = 'The session may have ended, or the network dropped. Reconnecting…';
+    el.overlayTitle.textContent = expired ? 'This session has ended' : 'Stream disconnected';
+    el.overlayBody.textContent = expired
+      ? 'The runner or its temporary address is gone. Start a new workflow run and open the URL it publishes.'
+      : 'The network dropped. Reconnecting…';
     reconnectTimer = setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(8000, reconnectDelay * 1.6);
   });
@@ -365,7 +371,7 @@ function renderSession(s) {
     ['Input driver', s.input ? s.input.driver : '—'],
     ['Touch verified', s.input ? (s.input.touchVerified ? 'yes' : 'not verified') : '—'],
     ['Session started', fmtTime(s.session && s.session.startedAt)],
-    ['Session ends', fmtTime(s.session && s.session.expiresAt)],
+    ['Session ends', s.session && s.session.expiresAt ? fmtTime(s.session.expiresAt) : 'when the run is cancelled'],
   ];
   el.sessionList.innerHTML = '';
   rows.forEach(([k, v]) => {
