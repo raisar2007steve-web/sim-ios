@@ -132,6 +132,25 @@ README.md                this file
 SECURITY.md              access model and credential handling
 ```
 
+## Session lifetime and the heartbeat log
+
+`duration_minutes` defaults to **0**, which keeps the session live until you
+cancel the workflow run (GitHub still caps a single job at six hours). Any
+value from 1 to 240 is a fixed budget in minutes.
+
+While a session is open, the keepalive step appends a status line to
+`session-logs/session-<run id>.log` and pushes it to `main` every five minutes
+(viewer health, frame count, timestamp), so the session can be followed from
+the repository as well as from the Actions log:
+
+```
+2026-11-21T08:12:31Z run=44882580575 viewer=up frames=1043
+```
+
+The last line of a session reads `session=closed`. To end a session early,
+cancel the run in the Actions tab; cleanup, the state save and the access
+artifact follow as usual.
+
 ## A permanent address with a named Cloudflare tunnel
 
 A quick tunnel (`*.trycloudflare.com`) is random and dies with the job. For a
