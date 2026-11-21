@@ -41,12 +41,12 @@ install_cloudflared() {
     *)     file="cloudflared-darwin-amd64.tgz" ;;
   esac
   log "Downloading cloudflared ($file)"
+  mkdir -p "$HOME/.local/bin"
   if curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/$file" -o /tmp/cloudflared.tgz \
-      && tar -xzf /tmp/cloudflared.tgz -C /tmp cloudflared 2>/dev/null \
-      && install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared 2>/dev/null; then
-    return 0
+      && tar -xzf /tmp/cloudflared.tgz -C /tmp cloudflared 2>/dev/null; then
+    install -m 0755 /tmp/cloudflared "$HOME/.local/bin/cloudflared" 2>/dev/null || true
+    export PATH="$HOME/.local/bin:$PATH"
   fi
-  install -m 0755 /tmp/cloudflared "$HOME/.local/bin/cloudflared" 2>/dev/null || true
   command -v cloudflared >/dev/null 2>&1
 }
 
@@ -94,7 +94,7 @@ start_cloudflared() {
 
   log "Starting Cloudflare quick tunnel to http://127.0.0.1:$PORT"
   : > "$TUNNEL_LOG"
-  nohup cloudflared tunnel --no-verify-cert --no-autoupdate --url "http://127.0.0.1:$PORT" \
+  nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" \
     > "$TUNNEL_LOG" 2>&1 &
   echo $! > "$SESSION_DIR/tunnel.pid"
   state_set TUNNEL_KIND "cloudflared-quick"

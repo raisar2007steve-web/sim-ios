@@ -12,7 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const WebSocket = require('./remote-viewer/node_modules/ws');
+const WebSocket = require('../../remote-viewer/node_modules/ws');
 
 const SESSION_DIR = process.env.SESSION_DIR || path.join(process.cwd(), '.session');
 

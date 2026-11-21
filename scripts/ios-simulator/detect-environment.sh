@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Detect macOS, installed Xcode versions and iOS Simulator runtimes, then pick
 # the newest stable Xcode and the newest stable iOS runtime. Nothing is assumed.
+#
+# This script intentionally avoids bash 4 features: macOS ships bash 3.2.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -19,63 +21,58 @@ log "macOS $MACOS_VERSION on $ARCH"
 log "CLT developer dir: $(xcode-select -p 2>/dev/null || echo none)"
 
 # ---------------------------------------------------------------- Xcode ---
-# Collect every Xcode installation and reject beta/RC builds unless nothing else
-# is available.
-mapfile -t XCODE_APPS < <(find /Applications -maxdepth 1 -name 'Xcode*.app' -print 2>/dev/null | sort -V || true)
-log "Xcode installations found: ${#XCODE_APPS[@]}"
-for app in "${XCODE_APPS[@]}"; do
-  v="$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -n 1 || true)"
-  log "  $app -> ${v:-unknown}"
-done
+# Collect every Xcode installation; beta/RC builds are recorded but only used
+# when no stable build exists.
+XCODE_APPS=""
+while IFS= read -r app; do
+  [[ -n "$app" ]] || continue
+  XCODE_APPS="${XCODE_APPS}${app}"$'\n'
+  version="$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -n 1 || true)"
+  log "  $app -> ${version:-unknown}"
+done < <(find /Applications -maxdepth 1 -name 'Xcode*.app' -print 2>/dev/null | sort -V)
 
-pick_xcode() {
-  python3 - "$@" <<'PY'
+PICKED="$(printf '%s' "$XCODE_APPS" | python3 -c '
 import re, subprocess, sys
 
-def version_key(text):
-    m = re.search(r'(\d+)(?:\.(\d+))?(?:\.(\d+))?', text or '')
-    if not m:
-        return (0, 0, 0)
-    return tuple(int(g or 0) for g in m.groups())
+apps = [line.strip() for line in sys.stdin if line.strip()]
 
-apps = sys.argv[1:]
+def vkey(v):
+    parts = re.findall(r"\d+", v or "")
+    return tuple(int(p) for p in parts) if parts else (0,)
+
 best = None
-best_key = None
 for app in apps:
     try:
-        out = subprocess.run([f"{app}/Contents/Developer/usr/bin/xcodebuild", "-version"],
-                             capture_output=True, text=True, timeout=60).stdout
+        out = subprocess.run([app + "/Contents/Developer/usr/bin/xcodebuild", "-version"],
+                             capture_output=True, text=True, timeout=120).stdout
     except Exception:
         continue
     first = out.strip().splitlines()[0] if out.strip() else ""
-    m = re.search(r'Xcode\s+(\S+)', first)
+    m = re.search(r"Xcode\s+(\S+)", first)
     if not m:
         continue
     version = m.group(1)
-    lower = f"{app} {version}".lower()
+    lower = (app + " " + version).lower()
     stable = not any(tag in lower for tag in ("beta", "-rc", "release candidate"))
-    key = version_key(version) + (1 if stable else 0,)
-    if best is None or key > best_key:
-        best, best_key = (app, version, stable), key
+    key = vkey(version) + (1 if stable else 0,)
+    if best is None or key > best[0]:
+        best = (key, app, version, stable)
+
 if best:
-    print(f"{best[0]}\t{best[1]}\t{'stable' if best[2] else 'prerelease'}")
-PY
-}
+    print("\t".join([best[1], best[2], "stable" if best[3] else "prerelease"]))
+')"
 
 DEVELOPER_DIR_PATH=""
 XCODE_VERSION=""
 XCODE_CHANNEL="unknown"
-if (( ${#XCODE_APPS[@]} > 0 )); then
-  PICKED="$(pick_xcode "${XCODE_APPS[@]}")"
-  if [[ -n "$PICKED" ]]; then
-    IFS=$'\t' read -r XCODE_APP XCODE_VERSION XCODE_CHANNEL <<< "$PICKED"
-    DEVELOPER_DIR_PATH="$XCODE_APP/Contents/Developer"
-  fi
+if [[ -n "$PICKED" ]]; then
+  IFS=$'\t' read -r XCODE_APP XCODE_VERSION XCODE_CHANNEL <<< "$PICKED"
+  DEVELOPER_DIR_PATH="$XCODE_APP/Contents/Developer"
 fi
 
 if [[ -z "$DEVELOPER_DIR_PATH" ]]; then
-  warn "No Xcode.app found under /Applications; falling back to xcode-select path."
-  DEVELOPER_DIR_PATH="$(xcode-select -p)"
+  warn "No Xcode.app found under /Applications; falling back to the xcode-select path."
+  DEVELOPER_DIR_PATH="$(xcode-select -p 2>/dev/null || true)"
   XCODE_VERSION="$(xcodebuild -version 2>/dev/null | head -n 1 | sed 's/^Xcode *//' || echo unknown)"
   XCODE_CHANNEL="unknown"
 fi
@@ -93,11 +90,10 @@ state_set XCODE_VERSION "$XCODE_VERSION"
 state_set XCODE_CHANNEL "$XCODE_CHANNEL"
 export DEVELOPER_DIR="$DEVELOPER_DIR_PATH"
 
+BUILD_NUMBER="$(DEVELOPER_DIR="$DEVELOPER_DIR_PATH" xcodebuild -version 2>/dev/null | tail -n 1 || true)"
+state_set XCODE_BUILD "$BUILD_NUMBER"
+
 log "Selected Xcode $XCODE_VERSION ($XCODE_CHANNEL) at $DEVELOPER_DIR_PATH"
-
-BUILD_VERSION="$(DEVELOPER_DIR="$DEVELOPER_DIR_PATH" xcodebuild -version 2>/dev/null | tail -n 1 || true)"
-state_set XCODE_BUILD "$BUILD_VERSION"
-
 log "xcodebuild -version:"
 DEVELOPER_DIR="$DEVELOPER_DIR_PATH" xcodebuild -version || true
 log "xcodebuild -showsdks:"
@@ -110,13 +106,14 @@ printf '%s\n' "$RUNTIMES_JSON" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 for r in data.get("runtimes", []):
-    print(f"  {r.get(\"identifier\")}  version={r.get(\"version\")}  available={r.get(\"isAvailable\")}")
+    print("  %s  version=%s  available=%s" % (r.get("identifier"), r.get("version"), r.get("isAvailable")))
 '
 
 RUNTIME_PICK="$(printf '%s\n' "$RUNTIMES_JSON" | python3 -c '
 import json, re, sys
 
 data = json.load(sys.stdin)
+
 def vkey(v):
     parts = re.findall(r"\d+", v or "")
     return tuple(int(p) for p in parts) if parts else (0,)
@@ -134,8 +131,9 @@ for r in data.get("runtimes", []):
 
 if not candidates:
     sys.exit(1)
-stable = [c for c in candidates if c[0]]
-pool = stable or candidates
+
+stable_pool = [c for c in candidates if c[0]]
+pool = stable_pool or candidates
 pool.sort(key=lambda c: c[1])
 chosen = pool[-1]
 print("\t".join([chosen[3], chosen[2], chosen[4]]))

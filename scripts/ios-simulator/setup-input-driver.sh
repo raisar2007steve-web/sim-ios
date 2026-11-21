@@ -20,7 +20,7 @@ install_idb() {
   log "Attempting idb (CoreSimulator HID injection, no Accessibility permission needed)"
   if ! command -v idb_companion >/dev/null 2>&1; then
     ( brew tap facebook/fb >/dev/null 2>&1 || true
-      timeout "$BUDGET" brew install facebook/fb/idb-companion ) >>"$ARTIFACTS_DIR/install-idb.log" 2>&1 || {
+      run_with_limit "$BUDGET" brew install facebook/fb/idb-companion ) >>"$ARTIFACTS_DIR/install-idb.log" 2>&1 || {
       warn "idb_companion could not be installed (see artifacts/install-idb.log)"; return 1; }
   fi
   if ! command -v idb >/dev/null 2>&1; then
@@ -34,7 +34,7 @@ install_idb() {
 install_axe() {
   log "Attempting AXe (HID injection through private frameworks)"
   ( brew tap cameroncooke/axe >/dev/null 2>&1 || true
-    timeout "$BUDGET" brew install cameroncooke/axe/axe ) >>"$ARTIFACTS_DIR/install-axe.log" 2>&1 || {
+    run_with_limit "$BUDGET" brew install cameroncooke/axe/axe ) >>"$ARTIFACTS_DIR/install-axe.log" 2>&1 || {
     warn "AXe could not be installed (see artifacts/install-axe.log)"; return 1; }
   command -v axe >/dev/null 2>&1
 }
@@ -42,7 +42,7 @@ install_axe() {
 install_applescript_helpers() {
   log "Installing cliclick for the AppleScript fallback driver"
   if ! command -v cliclick >/dev/null 2>&1; then
-    timeout 300 brew install cliclick >>"$ARTIFACTS_DIR/install-cliclick.log" 2>&1 || warn "cliclick install failed"
+    run_with_limit 300 brew install cliclick >>"$ARTIFACTS_DIR/install-cliclick.log" 2>&1 || warn "cliclick install failed"
   fi
 }
 

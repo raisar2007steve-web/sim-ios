@@ -52,7 +52,7 @@ else
   summary_md "- No usable input driver on this runner: the viewer is live but view-only."
 fi
 summary_md "- Streaming is framebuffer capture through \`simctl io screenshot\` (default 6 fps), not a video codec. Raise \`frame_rate\` for smoother motion at the cost of bandwidth."
-summary_md "- The `CLOUDFLARED_TUNNEL_TOKEN` / `NGROK_AUTHTOKEN` repository secrets are optional; without them a Cloudflare quick tunnel provides the temporary HTTPS URL."
+summary_md "- The CLOUDFLARED_TUNNEL_TOKEN / NGROK_AUTHTOKEN repository secrets are optional; without them a Cloudflare quick tunnel provides the temporary HTTPS URL."
 summary_md "- The session token is masked in workflow logs and is only published here and in the viewer URL."
 summary_md ""
 summary_md "Diagnostics and logs are attached to this run as the \`ios-simulator-diagnostics\` artifact."

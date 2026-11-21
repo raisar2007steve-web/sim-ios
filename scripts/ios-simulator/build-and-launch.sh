@@ -142,7 +142,7 @@ print((preferred or schemes)[0])
   if [[ "${INPUT_RUN_TESTS:-false}" == "true" ]]; then
     log "Running tests for scheme $SCHEME"
     set +e
-    timeout 900 xcodebuild \
+    run_with_limit 900 xcodebuild \
       "$CONTAINER_FLAG" "$CONTAINER_PATH" \
       -scheme "$SCHEME" \
       -destination "platform=iOS Simulator,id=$UDID" \
@@ -178,8 +178,8 @@ LAUNCH_OUT="$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1 || true)"
 printf '%s\n' "$LAUNCH_OUT" > "$ARTIFACTS_DIR/launch.log"
 log "simctl launch output: $LAUNCH_OUT"
 
-if [[ "$LAUNCH_OUT" =~ :\ ([0-9]+)$ ]]; then
-  LAUNCH_PID="${BASH_REMATCH[1]}"
+LAUNCH_PID="$(printf '%s' "$LAUNCH_OUT" | sed -nE 's/.*:[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' | tail -n 1)"
+if [[ -n "$LAUNCH_PID" ]]; then
   state_set APP_PID "$LAUNCH_PID"
   LAUNCH_STATUS="launched (pid $LAUNCH_PID)"
   log "Application running with pid $LAUNCH_PID"

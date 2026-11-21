@@ -12,7 +12,9 @@ EXPIRES_AT="${SESSION_EXPIRES_AT:-}"
 
 cat > "$ARTIFACTS_DIR/session-info.txt" <<EOF
 Remote iOS Simulator session
-Viewer URL : $ACCESS_URL
+Viewer host: $BASE
+Note       : open the URL from the job summary (it carries the session token,
+             which is deliberately not written into artifacts)
 Expires    : $EXPIRES_AT
 Device     : ${DEVICE_NAME:-unknown} (iOS ${IOS_VERSION:-unknown})
 Xcode      : ${XCODE_VERSION:-unknown}

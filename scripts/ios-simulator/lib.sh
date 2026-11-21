@@ -17,16 +17,39 @@ state_set() {
   local key="$1"; shift
   local value="$*"
   touch "$STATE_FILE"
-  # Replace an existing assignment, otherwise append.
-  local tmp="$STATE_FILE.tmp"
-  awk -v k="$key" 'BEGIN{done=0} {
-    if (index($0, k "=") == 1) { if (!done) print k "=" ENVIRON["STATE_VALUE"]; done=1 } else print
-  } END { if (!done) print k "=" ENVIRON["STATE_VALUE"] }' "$STATE_FILE" > "$tmp"
-  mv "$tmp" "$STATE_FILE"
+  if grep -q "^${key}=" "$STATE_FILE"; then
+    # Replace the existing assignment in place.
+    awk -v k="$key" -v v="$value" 'BEGIN{FS="="} $1==k {print k "=" v; next} {print}' \
+      "$STATE_FILE" > "$STATE_FILE.tmp"
+    mv "$STATE_FILE.tmp" "$STATE_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$STATE_FILE"
+  fi
   export "$key=$value"
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
   fi
+}
+
+# run_with_limit SECONDS command...  -> runs a command with a timeout
+# (macOS has no coreutils `timeout` by default). Returns 124 on expiry.
+run_with_limit() {
+  local limit="$1"; shift
+  "$@" &
+  local pid=$!
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( waited >= limit )); then
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 2
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 5
+    waited=$(( waited + 5 ))
+  done
+  wait "$pid"
 }
 
 state_get() {

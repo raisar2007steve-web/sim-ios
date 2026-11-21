@@ -63,7 +63,9 @@ state_set INPUT_DRIVER "$INPUT_DRIVER_NAME"
 state_set TOUCH_STATUS "$TOUCH_STATUS"
 
 log "Input driver: $INPUT_DRIVER_NAME, touch: $TOUCH_STATUS"
-[[ -n "${INPUT_NOTE:-}" ]] && log "Note: $INPUT_NOTE"
+if [[ -n "${INPUT_NOTE:-}" ]]; then
+  log "Note: $INPUT_NOTE"
+fi
 
 if [[ "$STREAM_STATUS" != "verified" ]]; then
   fail_step "No live frames were delivered over the public WebSocket endpoint. See artifacts/stream-check.log."
