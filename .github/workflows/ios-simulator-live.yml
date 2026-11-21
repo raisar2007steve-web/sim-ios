@@ -50,7 +50,7 @@ jobs:
       ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       PORT: '8080'
       FRAME_WIDTH: '750'
-      SIM_STATE_DIR: ${{ runner.temp }}/sim-state
+      SIM_STATE_DIR: ${{ github.workspace }}/.sim-state
 
     steps:
       - name: Check out repository
@@ -70,7 +70,7 @@ jobs:
         if: inputs.persist_state
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/sim-state
+          path: ${{ github.workspace }}/.sim-state
           key: ios-sim-state-${{ github.run_id }}
           restore-keys: |
             ios-sim-state-
@@ -131,7 +131,7 @@ jobs:
         if: always() && inputs.persist_state
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/sim-state
+          path: ${{ github.workspace }}/.sim-state
           key: ios-sim-state-${{ github.run_id }}
 
       - name: Write final summary
