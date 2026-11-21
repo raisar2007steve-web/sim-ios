@@ -64,4 +64,6 @@ state_set INPUT_SETUP "attempted: ${RAN[*]:-none}"
 log "Input tooling installed: ${RAN[*]:-none}"
 
 # Reset the simulator privacy/permission state that can block keyboard input.
-xcrun simctl privacy "$UDID" grant all dev.codebuff.simulator.demo >/dev/null 2>&1 || true
+if [[ -n "$(state_get BUNDLE_ID "")" ]]; then
+  xcrun simctl privacy "$UDID" grant all "$(state_get BUNDLE_ID "")" >/dev/null 2>&1 || true
+fi

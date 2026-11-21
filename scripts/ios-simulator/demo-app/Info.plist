@@ -7,13 +7,13 @@
   <key>CFBundleExecutable</key>
   <string>SimulatorDemo</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.codebuff.simulator.demo</string>
+  <string>com.starly.industries.demo</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Simulator Demo</string>
+  <string>Starly Industries</string>
   <key>CFBundleDisplayName</key>
-  <string>Sim Demo</string>
+  <string>Starly</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
