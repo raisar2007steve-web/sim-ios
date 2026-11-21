@@ -176,6 +176,9 @@ body {
 .workspace {
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
+  /* Without an explicit row the stage collapses to its (zero-sized) child and
+     the device can never measure the space available to it. */
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   padding: 12px 16px 14px;
   min-height: 0;
@@ -265,6 +268,7 @@ body {
 .stage {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   display: grid;
   place-items: center;
   overflow: hidden;

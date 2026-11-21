@@ -69,9 +69,15 @@ function layoutDevice() {
   const shortSide = Math.min(cw, ch);
   const ar = displayLandscape ? longSide / shortSide : shortSide / longSide;
 
-  const stageW = stage.clientWidth;
-  const stageH = stage.clientHeight;
-  if (stageW < 40 || stageH < 40) return;
+  let stageW = stage.clientWidth;
+  let stageH = stage.clientHeight;
+  // A freshly rendered or collapsed layout can report no size; fall back to the
+  // space left in the window so the screen is never left unmeasured.
+  if (stageH < 40) {
+    const rect = stage.getBoundingClientRect();
+    stageH = Math.max(160, window.innerHeight - rect.top - 12);
+  }
+  if (stageW < 40) stageW = Math.max(160, window.innerWidth - 120);
 
   const root = getComputedStyle(document.documentElement);
   const pad = parseFloat(root.getPropertyValue('--frame-pad')) || 11;
