@@ -13,18 +13,30 @@ log()  { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 warn() { printf '[%s] WARNING: %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 
 # state_set KEY VALUE  -> available to later scripts and later workflow steps
+#
+# Values are single-quoted so the file can be sourced safely: detected values
+# legally contain spaces, parentheses and slashes (e.g. "26.7.2 (25G332)").
 state_set() {
   local key="$1"; shift
   local value="$*"
-  touch "$STATE_FILE"
-  if grep -q "^${key}=" "$STATE_FILE"; then
-    # Replace the existing assignment in place.
-    awk -v k="$key" -v v="$value" 'BEGIN{FS="="} $1==k {print k "=" v; next} {print}' \
-      "$STATE_FILE" > "$STATE_FILE.tmp"
-    mv "$STATE_FILE.tmp" "$STATE_FILE"
-  else
-    printf '%s=%s\n' "$key" "$value" >> "$STATE_FILE"
+  local escaped
+  escaped="$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
+  local tmp="$STATE_FILE.tmp"
+  : > "$tmp"
+  local found=0
+  if [[ -f "$STATE_FILE" ]]; then
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      case "$line" in
+        "${key}="*) printf "%s='%s'\n" "$key" "$escaped" >> "$tmp"; found=1 ;;
+        *) printf '%s\n' "$line" >> "$tmp" ;;
+      esac
+    done < "$STATE_FILE"
   fi
+  if (( found == 0 )); then
+    printf "%s='%s'\n" "$key" "$escaped" >> "$tmp"
+  fi
+  mv "$tmp" "$STATE_FILE"
   export "$key=$value"
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
@@ -54,15 +66,15 @@ run_with_limit() {
 
 state_get() {
   local key="$1" default="${2:-}"
+  local value=""
   if [[ -f "$STATE_FILE" ]]; then
-    local line
-    line="$(grep -E "^${key}=" "$STATE_FILE" | tail -n 1 || true)"
-    if [[ -n "$line" ]]; then
-      printf '%s' "${line#*=}"
-      return 0
-    fi
+    value="$( ( set +u; . "$STATE_FILE" >/dev/null 2>&1; eval "printf '%s' \"\${$key:-}\"" ) 2>/dev/null || true )"
   fi
-  printf '%s' "$default"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$default"
+  fi
 }
 
 # summary_md "markdown"  -> append to the GitHub Actions job summary

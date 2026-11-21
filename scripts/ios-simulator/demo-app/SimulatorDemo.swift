@@ -35,7 +35,6 @@ struct ContentView: View {
                 Text("\(taps)")
                     .font(.system(size: 96, weight: .thin, design: .rounded))
                     .foregroundStyle(accent)
-                    .contentTransition(.numericText())
 
                 Text(taps == 1 ? "tap received" : "taps received")
                     .font(.subheadline)
@@ -61,9 +60,9 @@ struct ContentView: View {
             .padding(28)
         }
         .contentShape(Rectangle())
-        .onTapGesture { location in
+        .onTapGesture {
             taps += 1
-            lastGesture = String(format: "tap at %.0f, %.0f", location.x, location.y)
+            lastGesture = "tap received"
         }
         .gesture(
             DragGesture(minimumDistance: 24)
