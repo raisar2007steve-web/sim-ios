@@ -57,6 +57,7 @@ push_heartbeat() {
 }
 
 last_push=0
+last_wake=0
 failures=0
 while true; do
   now="$(date -u +%s)"
@@ -92,6 +93,16 @@ try:
 except Exception:
     raise SystemExit(0)
 print(d.get("stream", {}).get("frameSeq", 0))' 2>/dev/null || true)"
+
+  # Keep Simulator.app open and frontmost: the AppleScript input driver needs a
+  # live window, and a long session can lose it (display sleep, focus change).
+  if (( now - last_wake >= 240 )); then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      open -a Simulator --args -CurrentDeviceUDID "${UDID:-}" >/dev/null 2>&1 || true
+      osascript -e 'tell application "Simulator" to activate' >/dev/null 2>&1 || true
+    fi
+    last_wake="$now"
+  fi
 
   if (( now - last_push >= PUSH_EVERY_MIN * 60 )); then
     {
