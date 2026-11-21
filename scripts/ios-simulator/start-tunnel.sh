@@ -2,10 +2,15 @@
 # Start a temporary HTTPS tunnel to the viewer and publish its URL.
 #
 # Providers, tried in order until one serves /api/health over the public URL:
-#   1. Cloudflare quick tunnel over HTTP/2 (no account needed)
-#   2. localhost.run over SSH (no account needed)
-#   3. ngrok (NGROK_AUTHTOKEN)
-#   4. Cloudflare named tunnel (CLOUDFLARED_TUNNEL_TOKEN + TUNNEL_HOSTNAME)
+#   1. Cloudflare named tunnel (CLOUDFLARED_TUNNEL_TOKEN + TUNNEL_HOSTNAME)
+#      -> the same permanent hostname on every run
+#   2. Cloudflare quick tunnel over HTTP/2 (no account needed)
+#   3. localhost.run over SSH (no account needed)
+#   4. ngrok (NGROK_AUTHTOKEN)
+#
+# The named tunnel is tried first on purpose: it is the only provider that
+# gives a stable URL, so a configured Cloudflare hostname is never displaced
+# by a random quick-tunnel hostname.
 #
 # Only this authenticated HTTP endpoint leaves the runner: no VNC, screen
 # sharing or control port is ever published.
@@ -244,14 +249,18 @@ try_ngrok() {
 }
 
 try_cloudflared_named() {
-  [[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" && -n "${TUNNEL_HOSTNAME:-}" ]] || return 1
+  local token hostname url
+  token="${CLOUDFLARED_TUNNEL_TOKEN:-${CF_TUNNEL_TOKEN:-}}"
+  hostname="${TUNNEL_HOSTNAME:-${CF_TUNNEL_HOSTNAME:-}}"
+  # Accept a full URL as well as a bare hostname.
+  hostname="$(printf '%s' "$hostname" | sed -E 's#^https?://##; s#/+$##')"
+  [[ -n "$token" && -n "$hostname" ]] || return 1
   install_cloudflared || return 1
-  local url
   : > "$TUNNEL_LOG"
-  start_process cloudflared-named cloudflared tunnel --no-autoupdate run --token "$CLOUDFLARED_TUNNEL_TOKEN"
-  url="https://${TUNNEL_HOSTNAME}"
-  sleep 5
-  if wait_for_endpoint "$url" 90; then
+  start_process cloudflared-named cloudflared tunnel --noautoupdate run --token "$token"
+  url="https://${hostname}"
+  diag "named tunnel hostname: $url (stable across runs)"
+  if wait_for_endpoint "$url" 120; then
     printf '%s' "$url"
     return 0
   fi
@@ -261,7 +270,7 @@ try_cloudflared_named() {
 }
 
 PUBLIC_URL=""
-for provider in try_cloudflared_quick try_localhost_run try_ngrok try_cloudflared_named; do
+for provider in try_cloudflared_named try_cloudflared_quick try_localhost_run try_ngrok; do
   diag "attempt: $provider"
   result="$("$provider")"
   if [[ -n "$result" ]]; then

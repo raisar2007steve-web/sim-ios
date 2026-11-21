@@ -61,8 +61,8 @@ GitHub Actions (macos-latest)
 2. *(Optional)* add repository secrets — the workflow works without them:
    | Secret | Purpose |
    | --- | --- |
-   | `CLOUDFLARED_TUNNEL_TOKEN` | Use a named Cloudflare tunnel instead of a quick tunnel |
-   | `TUNNEL_HOSTNAME` | Public hostname of that named tunnel, e.g. `sim.example.com` |
+   | `CLOUDFLARED_TUNNEL_TOKEN` | Run behind a named Cloudflare tunnel instead of a random quick-tunnel URL |
+   | `TUNNEL_HOSTNAME` | Public hostname of that named tunnel, e.g. `sim.example.com` (this becomes the permanent address) |
    | `NGROK_AUTHTOKEN` | Fall back to ngrok if Cloudflare is unavailable |
 3. Actions → **iOS Simulator Live** → *Run workflow*.
 4. Wait for the *Publish connection info and keep session alive* step; the URL is
@@ -131,6 +131,32 @@ remote-viewer/           streaming server + browser viewer
 README.md                this file
 SECURITY.md              access model and credential handling
 ```
+
+## A permanent address with a named Cloudflare tunnel
+
+A quick tunnel (`*.trycloudflare.com`) is random and dies with the job. For a
+single address that stays the same across every session, create a named tunnel
+once in the Cloudflare dashboard:
+
+1. Cloudflare Zero Trust → **Networks → Tunnels → Create a tunnel** (type
+   *Cloudflared*), copy the **tunnel token**.
+2. In that tunnel add a **Public Hostname** for a domain you control, service
+   `http://localhost:8080` (the viewer port).
+3. Add repository secrets: `CLOUDFLARED_TUNNEL_TOKEN` (the token) and
+   `TUNNEL_HOSTNAME` (e.g. `sim.example.com`).
+
+From then on `start-tunnel.sh` tries the named tunnel **first**, so every run is
+published at `https://$TUNNEL_HOSTNAME` — the same URL every time, with the
+session token still required on top of it. The random quick tunnel remains the
+fallback when those secrets are absent, and localhost.run/ngrok back it up.
+
+What "always available" can and cannot mean here: the address is permanent, but
+the thing behind it exists only while a workflow run is alive, because GitHub
+hosts macOS runners per job and bills per minute. So the URL is stable and
+reused; the stream is live whenever a session is running. For a genuinely 24/7
+stream you need a machine that stays up (a self-hosted macOS runner registered
+to this repository and kept online, reached through the same named tunnel) — the
+viewer, scripts and tunnel are unchanged, only the runner's lifetime differs.
 
 ## Persistent device state (save and resume)
 

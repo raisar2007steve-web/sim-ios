@@ -48,6 +48,54 @@ let viewRotated = false;
 let closeRequested = false;
 const mock = { active: false, start: performance.now(), taps: [] };
 
+/* ------------------------------------------------------------ device fit --- */
+
+// The frame is measured in pixels from the free space around it, so the
+// simulator always fills the viewport at its own aspect ratio and the page
+// never scrolls or crops the screen.
+function layoutDevice() {
+  const stage = el.stage;
+  if (!stage) return;
+  const cw = el.canvas.width || 1179;
+  const ch = el.canvas.height || 2556;
+  const displayLandscape = (cw > ch) !== viewRotated;
+  const longSide = Math.max(cw, ch);
+  const shortSide = Math.min(cw, ch);
+  const ar = displayLandscape ? longSide / shortSide : shortSide / longSide;
+
+  const stageW = stage.clientWidth;
+  const stageH = stage.clientHeight;
+  if (stageW < 40 || stageH < 40) return;
+
+  const root = getComputedStyle(document.documentElement);
+  const pad = parseFloat(root.getPropertyValue('--frame-pad')) || 11;
+  const chrome = pad * 2 + 2; // frame padding plus its 1px border on each side
+  const availW = stageW - 4;
+  const availH = stageH - 4;
+  let innerH = Math.min(availH - chrome, (availW - chrome) / ar);
+  innerH = Math.max(60, Math.floor(innerH));
+  const innerW = Math.floor(innerH * ar);
+  const frameW = innerW + chrome;
+  const frameH = innerH + chrome;
+
+  el.deviceFrame.style.width = `${frameW}px`;
+  el.deviceFrame.style.height = `${frameH}px`;
+  el.deviceFrame.style.setProperty('--frame-radius', `${Math.round(Math.min(52, frameW * 0.085))}px`);
+  el.deviceFrame.style.setProperty('--screen-radius', `${Math.round(Math.min(44, frameW * 0.072))}px`);
+
+  // A rotated view swaps the canvas box so the frame still fits exactly.
+  el.canvas.style.width = `${viewRotated ? innerH : innerW}px`;
+  el.canvas.style.height = `${viewRotated ? innerW : innerH}px`;
+  el.deviceFrame.classList.toggle('rotated', viewRotated);
+}
+
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => layoutDevice()).observe(el.stage);
+}
+window.addEventListener('resize', layoutDevice);
+window.addEventListener('orientationchange', () => setTimeout(layoutDevice, 250));
+document.addEventListener('fullscreenchange', () => setTimeout(layoutDevice, 150));
+
 /* ------------------------------------------------------------- helpers --- */
 
 function toast(message, kind) {
@@ -179,10 +227,13 @@ async function handleFrame(buf) {
   pendingBitmap = true;
   try {
     const bitmap = await createImageBitmap(new Blob([buf], { type: 'image/jpeg' }));
+    const resized = el.canvas.width !== bitmap.width || el.canvas.height !== bitmap.height;
     el.canvas.width = bitmap.width;
     el.canvas.height = bitmap.height;
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close();
+    // The simulator rotates: refit the frame to the new orientation.
+    if (resized) layoutDevice();
   } catch (_) {
     // Malformed frame: drop it and wait for the next one.
   } finally {
@@ -271,11 +322,11 @@ async function loadStatus() {
 function applyStatus(s) {
   if (!s) return;
   status = s;
-  el.macos.textContent = s.host && s.host.macos ? s.host.macos : '—';
-  el.xcode.textContent = s.host && s.host.xcode ? s.host.xcode : '—';
-  el.ios.textContent = s.device && s.device.iosVersion ? `iOS ${s.device.iosVersion}` : '—';
-  el.device.textContent = s.device ? s.device.name : '—';
-  el.expiry.textContent = fmtTime(s.session && s.session.expiresAt);
+  if (el.macos) el.macos.textContent = s.host && s.host.macos ? s.host.macos : '—';
+  if (el.xcode) el.xcode.textContent = s.host && s.host.xcode ? s.host.xcode : '—';
+  if (el.ios) el.ios.textContent = s.device && s.device.iosVersion ? `iOS ${s.device.iosVersion}` : '—';
+  if (el.device) el.device.textContent = s.device ? s.device.name : '—';
+  if (el.expiry) el.expiry.textContent = fmtTime(s.session && s.session.expiresAt);
 
   const input = s.input || {};
   const label = input.touchVerified
@@ -283,8 +334,8 @@ function applyStatus(s) {
     : input.touch
       ? `Interactive · ${input.driver} (unverified)`
       : 'View only';
-  el.input.textContent = label;
-  el.inputChip.dataset.mode = input.touch ? 'interactive' : 'view';
+  if (el.input) el.input.textContent = label;
+  if (el.inputChip) el.inputChip.dataset.mode = input.touch ? 'interactive' : 'view';
   el.btnHome.disabled = !input.home;
   el.btnRotate.disabled = !input.home;
   el.btnKeyboard.disabled = !input.keyboard;
@@ -396,8 +447,7 @@ el.btnRotate.addEventListener('click', () => {
   }
   // Device rotation is not exposed by this runner's driver: rotate the view only.
   viewRotated = !viewRotated;
-  el.deviceFrame.classList.toggle('rotated', viewRotated);
-  el.canvas.classList.toggle('rotated', viewRotated);
+  layoutDevice();
   toast('View rotated locally. Device rotation is unavailable with this input driver.');
 });
 
@@ -473,4 +523,5 @@ setInterval(() => {
 
 setInterval(loadStatus, 15000);
 
+layoutDevice();
 connect();
