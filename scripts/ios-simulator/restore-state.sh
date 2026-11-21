@@ -68,18 +68,26 @@ tar -xzf "$ARCHIVE" -C "$DEVICES_DIR" || {
   exit 0
 }
 
-# CoreSimulator picks restored devices up from the directory, but the service can
-# hold a stale device set for a moment.
+# CoreSimulator caches its device set when the service starts, so a directory that
+# appears afterwards is invisible to simctl until the service reloads it.
+log "Reloading CoreSimulator service so the restored device is registered"
+killall -9 com.apple.CoreSimulator.CoreSimulatorService >/dev/null 2>&1 || true
+sleep 2
+
 found=""
-for _ in $(seq 1 20); do
+for _ in $(seq 1 30); do
   if xcrun simctl list devices -j 2>/dev/null | grep -q "$RESTORED_UDID"; then
     found="yes"
     break
   fi
-  sleep 1
+  sleep 2
 done
 
 if [[ -z "$found" ]]; then
+  if [[ -f "$DEVICES_DIR/$RESTORED_UDID/device.plist" ]]; then
+    warn "Restored device $RESTORED_UDID exists on disk but simctl still does not list it; starting fresh to avoid a broken boot."
+    rm -rf "$DEVICES_DIR/$RESTORED_UDID"
+  fi
   warn "Restored device $RESTORED_UDID is not visible to this Xcode/runtime set; continuing with a fresh device."
   state_set STATE_RESTORE "fresh (saved device not compatible with this runner)"
   summary_md ""

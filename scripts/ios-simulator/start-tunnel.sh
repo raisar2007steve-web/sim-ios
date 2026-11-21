@@ -272,7 +272,12 @@ try_cloudflared_named() {
 PUBLIC_URL=""
 for provider in try_cloudflared_named try_cloudflared_quick try_localhost_run try_ngrok; do
   diag "attempt: $provider"
-  result="$("$provider")"
+  # lib.sh turns on `set -e`; a provider that is not configured or fails must
+  # fall through to the next one instead of aborting the chain.
+  result=""
+  if ! result="$("$provider")"; then
+    result=""
+  fi
   if [[ -n "$result" ]]; then
     PUBLIC_URL="$result"
     diag "provider $provider succeeded: $PUBLIC_URL"
