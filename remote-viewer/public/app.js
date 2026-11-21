@@ -224,10 +224,13 @@ requestAnimationFrame(renderLoop);
 
 async function handleFrame(buf) {
   lastFrameAt = Date.now();
+  // The first real frame is what proves the stream works: dismiss the overlay
+  // for every session, not just the demo one.
+  el.overlay.hidden = true;
+  setStatus('live', 'Live');
   if (mock.active) {
     mock.active = false;
     el.mockBadge.hidden = true;
-    el.overlay.hidden = true;
   }
   if (pendingBitmap) return;
   pendingBitmap = true;
