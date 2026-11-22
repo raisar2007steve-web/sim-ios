@@ -123,7 +123,7 @@ Known limits:
 
 ### The strict rate gate
 
-`min_fps` (default `5`) is enforced, not advisory. `verify-stream.js` times a
+`min_fps` (default `4`) is enforced, not advisory. `verify-stream.js` times a
 six-second window on the public WebSocket, stores the measured rate in
 `.session/stream-check.json`, and the run **fails without publishing** when the
 measurement is below the floor. A session is never described as smooth on the

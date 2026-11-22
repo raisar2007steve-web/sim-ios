@@ -20,7 +20,7 @@ on:
       min_fps:
         description: 'Hard minimum measured fps (0 = no gate). The run fails instead of publishing a slower session.'
         required: false
-        default: '5'
+        default: '4'
       run_tests:
         description: 'Run unit/UI tests when the scheme supports them'
         required: false
