@@ -54,6 +54,10 @@ else
 fi
 state_set STREAM_STATUS "$STREAM_STATUS"
 
+# Bandwidth guard: a metered tunnel must not eat its transfer quota silently.
+# Advisory only — it records the rate and a suggested frame width.
+bash "$SCRIPT_DIR/bandwidth-guard.sh" || true
+
 # Input check: does injected input actually reach the simulator?
 node "$SCRIPT_DIR/touch-selftest.js" > "$ARTIFACTS_DIR/touch-selftest.log" 2>&1 || true
 if [[ -f "$SESSION_DIR/capability.json" ]]; then
@@ -91,6 +95,7 @@ summary_md "| --- | --- |"
 summary_row "Public HTTPS endpoint" "reachable"
 summary_row "Authentication" "verified (401 without token, 200 with token)"
 summary_row "Live stream" "verified over WSS"
+summary_row "Stream bandwidth" "${BANDWIDTH_SUMMARY:-not measured}"
 summary_row "Input driver" "$INPUT_DRIVER_NAME"
 summary_row "Touch injection" "$TOUCH_STATUS"
 summary_md ""

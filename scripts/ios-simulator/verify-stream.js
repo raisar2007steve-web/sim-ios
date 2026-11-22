@@ -52,6 +52,7 @@ function checkStream() {
     let hello = null;
     let frames = 0;
     let bytes = 0;
+    let windowBytes = 0;
     let windowStart = 0;
     let finished = false;
     const openedAt = Date.now();
@@ -60,12 +61,17 @@ function checkStream() {
       finished = true;
       const seconds = windowStart ? (Date.now() - windowStart) / 1000 : 0;
       const fps = seconds ? Math.round((frames / seconds) * 10) / 10 : 0;
+      // Bytes actually delivered inside the timed window: the tunnel's transfer
+      // cost, measured instead of inferred from the configured frame size.
+      const bytesPerSecond = seconds ? Math.round(windowBytes / seconds) : 0;
       result.stream = {
         hello: !!hello,
         frames,
         bytes,
         seconds: Math.round(seconds * 10) / 10,
         fps,
+        bytesPerSecond,
+        bytesPerFrame: frames ? Math.round(windowBytes / frames) : 0,
         minFps: MIN_FPS,
         error: error || null,
         url: wsUrl.replace(token, '***'),
@@ -88,6 +94,7 @@ function checkStream() {
           windowStart = Date.now();
           setTimeout(() => done(null), MEASURE_MS);
         }
+        windowBytes += data.length;
         frames += 1;
         return;
       }
@@ -110,6 +117,14 @@ function checkStream() {
     result.auth.titlePresent = /Remote iOS Simulator/i.test(authed.body);
     const status = await http('/api/status', { Authorization: `Bearer ${token}` });
     result.auth.statusEndpoint = status.status;
+    try {
+      // Served width is what a bandwidth suggestion has to scale from.
+      const srv = JSON.parse(status.body);
+      result.server = {
+        width: (srv.stream && srv.stream.width) || 0,
+        targetFps: (srv.stream && srv.stream.fps) || 0,
+      };
+    } catch (_) { /* optional context; the guard falls back to FRAME_WIDTH */ }
     await checkStream();
     result.ok = result.auth.withoutToken === 401 && result.auth.withToken === 200 && result.stream.frames > 0;
     // One slow window is not a verdict: re-measure once before failing a session.

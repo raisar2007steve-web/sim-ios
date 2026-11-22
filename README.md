@@ -78,6 +78,7 @@ GitHub Actions (macos-latest)
 | `duration_minutes` | `30` | Clamped to 1–240. The job timeout is 280 minutes. |
 | `frame_rate` | `30` | 1–90 frame-rate **cap**. The loop runs as fast as `simctl` allows; this only limits it. |
 | `min_fps` | `3` | Hard floor on the measured rate. Below it the run fails without publishing; `0` disables the gate. |
+| `frame_width` | `0` | Stream width in px; `0` is the native device resolution. Lower it (e.g. `750`) to cut bandwidth — see *The bandwidth guard*. |
 | `tunnel` | `ngrok` | Provider tried first: `ngrok`, `cloudflare`, `quick`, `ssh`, `auto`. See *Choosing the tunnel*. |
 | `run_tests` | `false` | Runs `xcodebuild test` for the scheme (15 minute cap). |
 | `install_input_driver` | `true` | Installs `idb`/`AXe`/`cliclick`. Adds a few minutes; set `false` for a view-only session. |
@@ -135,6 +136,31 @@ Set `min_fps` to `60` or `90` and this workflow will fail every time on a
 GitHub-hosted runner — that is the honest answer, not a bug. The ceiling here is
 `simctl io screenshot`, around 5 fps.
 
+### The bandwidth guard
+
+A framebuffer stream is expensive to carry: at native resolution one frame is
+200–550 KB, so a 3–5 fps session moves 0.5–2.5 GB per hour. A metered tunnel
+cannot serve that for long — ngrok's free plan includes 1 GB of transfer per
+month — and the failure mode is silent: the tunnel starts refusing after the
+quota is gone.
+
+So `verify-stream.js` records the bytes actually delivered inside the timed
+window (`bytesPerSecond`, `bytesPerFrame`), and `bandwidth-guard.sh` checks that
+against a guard of **250 KB/s** (~0.9 GB/h, `SIM_BANDWIDTH_WARN_BPS` to change).
+When the measured rate is above it, the run summary gets a **Bandwidth guard**
+section and a workflow warning annotation, naming the rate, the per-frame size
+and how fast the quota goes, plus the `frame_width` that would fit:
+
+```
+measured 704 KB/s (~2.5 GB/h) · 241 KB per frame at 3.3 fps
+suggested frame_width 730 (~233 KB/s, 0.84 GB/h)
+```
+
+The suggestion scales the measured frame size by pixel count (JPEG size grows
+roughly with frame area), so it is an estimate and says so. The guard is
+advisory: it never fails a session, because a slow-but-live stream is still the
+product. Nothing is measured if the stream itself failed.
+
 ### Why a VNC/noVNC or RDP build cannot fix it on GitHub runners
 
 Both need to capture the macOS desktop, and macOS gates screen capture behind the
@@ -177,6 +203,7 @@ scripts/ios-simulator/
   start-viewer.sh        starts the streaming server
   start-tunnel.sh        Cloudflare quick/named tunnel, ngrok fallback
   verify-session.sh      auth + stream + input verification
+  bandwidth-guard.sh     warns on tunnel bandwidth, suggests a fitting frame_width
   verify-stream.js       WSS frame check against the public URL
   touch-selftest.js      screenshot-diff proof of injected input
   keepalive.sh           publishes the URL, holds the session open
@@ -232,6 +259,12 @@ the secret the step logs that it is skipping ngrok and moves to the next
 provider, so choosing `ngrok` never breaks a run. With a static domain the
 address stays the same across runs; without one, ngrok issues a random
 `*.ngrok-free.app` host each time.
+
+Bandwidth is the other ngrok limit: the free plan carries 1 GB of transfer per
+month, and a native-resolution stream at a few frames per second is gigabytes
+per hour. The run summary warns when that is the case and prints the
+`frame_width` that fits (see *The bandwidth guard*); with `frame_width: 750` a
+frame is roughly a tenth of the size.
 
 **Privacy.** The session always requires the temporary `?token=` (48 hex
 characters, HttpOnly cookie or `Authorization: Bearer`), and the tunnel exposes

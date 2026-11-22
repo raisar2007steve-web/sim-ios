@@ -25,6 +25,10 @@ on:
         description: 'Tunnel tried first: ngrok | cloudflare | quick | ssh | auto'
         required: false
         default: 'ngrok'
+      frame_width:
+        description: 'Frame width in px (0 = native). Lower it to cut tunnel bandwidth when the guard warns.'
+        required: false
+        default: '0'
       run_tests:
         description: 'Run unit/UI tests when the scheme supports them'
         required: false
@@ -61,10 +65,6 @@ jobs:
       SESSION_DIR: ${{ github.workspace }}/.session
       ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       PORT: '8080'
-      # 0 = native device resolution: no per-frame `sips` downscale, which is
-      # the single biggest cost in the capture loop. Set a width (e.g. 750) to
-      # trade sharpness for bandwidth.
-      FRAME_WIDTH: '0'
       SIM_STATE_DIR: ${{ github.workspace }}/.sim-state
 
     steps:
@@ -111,6 +111,12 @@ jobs:
         run: bash scripts/ios-simulator/setup-input-driver.sh
 
       - name: Start streaming server
+        env:
+          # 0 = native device resolution: no per-frame `sips` downscale, which is
+          # the single biggest cost in the capture loop. A width (e.g. 750)
+          # trades sharpness for tunnel bandwidth; the bandwidth guard suggests
+          # one when the measured rate would burn a metered tunnel's quota.
+          FRAME_WIDTH: ${{ inputs.frame_width }}
         run: bash scripts/ios-simulator/start-viewer.sh
 
       - name: Start HTTPS tunnel

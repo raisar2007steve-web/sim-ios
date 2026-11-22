@@ -31,6 +31,7 @@ summary_row "Authentication" "${AUTH_STATUS:-not verified}"
 summary_row "Live stream" "${STREAM_STATUS:-not verified}"
 summary_row "Input driver" "${INPUT_DRIVER:-none}"
 summary_row "Touch injection" "${TOUCH_STATUS:-unknown}"
+summary_row "Stream bandwidth" "${BANDWIDTH_SUMMARY:-not measured}"
 if [[ "${SESSION_UNLIMITED:-no}" == "yes" ]]; then
   summary_row "Session ended" "when the run was cancelled"
 else
@@ -60,6 +61,11 @@ else
 fi
 summary_md "- Streaming is framebuffer capture through \`simctl io screenshot\` at native resolution, not a video codec. \`frame_rate\` is a cap; the viewer reports the measured rate."
 summary_md "- The CLOUDFLARED_TUNNEL_TOKEN / NGROK_AUTHTOKEN repository secrets are optional; without them a Cloudflare quick tunnel provides the temporary HTTPS URL."
+if [[ "${BANDWIDTH_STATUS:-}" == "over guard" ]]; then
+  BANDWIDTH_LINE="${BANDWIDTH_SUGGESTION:-Set a lower frame_width}"
+  case "$BANDWIDTH_LINE" in *.) ;; *) BANDWIDTH_LINE="$BANDWIDTH_LINE." ;; esac
+  summary_md "- Bandwidth guard tripped: ${BANDWIDTH_SUMMARY}. ${BANDWIDTH_LINE} A metered tunnel such as ngrok's free plan stops serving once its transfer quota is gone."
+fi
 summary_md "- The session token is masked in workflow logs and is only published here and in the viewer URL."
 summary_md ""
 summary_md "Diagnostics and logs are attached to this run as the \`ios-simulator-diagnostics\` artifact."
