@@ -58,7 +58,7 @@ elif [[ "${TOUCH_STATUS:-}" == "unverified" ]]; then
 else
   summary_md "- No usable input driver on this runner: the viewer is live but view-only."
 fi
-summary_md "- Streaming is framebuffer capture through \`simctl io screenshot\` (default 6 fps), not a video codec. Raise \`frame_rate\` for smoother motion at the cost of bandwidth."
+summary_md "- Streaming is framebuffer capture through \`simctl io screenshot\` at native resolution, not a video codec. \`frame_rate\` is a cap; the viewer reports the measured rate."
 summary_md "- The CLOUDFLARED_TUNNEL_TOKEN / NGROK_AUTHTOKEN repository secrets are optional; without them a Cloudflare quick tunnel provides the temporary HTTPS URL."
 summary_md "- The session token is masked in workflow logs and is only published here and in the viewer URL."
 summary_md ""

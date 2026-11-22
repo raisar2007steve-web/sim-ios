@@ -14,9 +14,9 @@ on:
         required: false
         default: '0'
       frame_rate:
-        description: 'Target stream frame rate (1-15)'
+        description: 'Frame-rate cap (1-90). The loop runs as fast as the device allows; this only limits it.'
         required: false
-        default: '6'
+        default: '30'
       run_tests:
         description: 'Run unit/UI tests when the scheme supports them'
         required: false
@@ -50,7 +50,10 @@ jobs:
       SESSION_DIR: ${{ github.workspace }}/.session
       ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       PORT: '8080'
-      FRAME_WIDTH: '750'
+      # 0 = native device resolution: no per-frame `sips` downscale, which is
+      # the single biggest cost in the capture loop. Set a width (e.g. 750) to
+      # trade sharpness for bandwidth.
+      FRAME_WIDTH: '0'
       SIM_STATE_DIR: ${{ github.workspace }}/.sim-state
 
     steps:

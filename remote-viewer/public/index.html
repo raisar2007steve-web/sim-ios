@@ -74,6 +74,7 @@
           <button type="button" class="tool wide" id="overlay-retry">Retry</button>
         </div>
       </div>
+      <div class="stream-stat glass-pill" id="stream-stat" hidden aria-hidden="true"></div>
       <div class="mock-badge glass-pill" id="mock-badge" hidden>DEMO PREVIEW · NO SIMULATOR ATTACHED</div>
     </div>
   </main>
@@ -93,6 +94,13 @@
 </dialog>
 
 <div class="toast glass" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- Touch cursor: drawn over the stream so you can see exactly where a tap or
+     drag will land on the simulated device. -->
+<div class="cursor" id="cursor" hidden aria-hidden="true">
+  <span class="cursor-ring"></span>
+  <span class="cursor-dot"></span>
+</div>
 
 <script src="app.js"></script>
 </body>

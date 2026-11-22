@@ -40,6 +40,8 @@ const el = {
   sessionNote: document.getElementById('session-note'),
   toast: document.getElementById('toast'),
   hint: document.getElementById('hint'),
+  cursor: document.getElementById('cursor'),
+  streamStat: document.getElementById('stream-stat'),
 };
 
 const ctx = el.canvas.getContext('2d', { alpha: false });
@@ -53,6 +55,8 @@ let viewRotated = false;
 let closeRequested = false;
 let failedAttempts = 0;
 const mock = { active: false, start: performance.now(), taps: [] };
+let rxFrames = 0;
+let rxFps = 0;
 
 /* ------------------------------------------------------------ device fit --- */
 
@@ -228,7 +232,43 @@ function renderLoop(now) {
 }
 requestAnimationFrame(renderLoop);
 
+/* --------------------------------------------------------- touch cursor --- */
+
+// The simulator screen has no pointer of its own, so the page draws one: a glass
+// ring that sits exactly where the next tap or drag will land, shrinks while
+// pressed and pulses a ripple when the touch has been sent to the device.
+
+function moveCursor(x, y) {
+  if (!el.cursor) return;
+  el.cursor.hidden = false;
+  el.cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+}
+
+function hideCursor() {
+  if (!el.cursor) return;
+  el.cursor.hidden = true;
+  el.cursor.classList.remove('pressed');
+}
+
+function rippleAt(x, y) {
+  const ring = document.createElement('span');
+  ring.className = 'ripple';
+  ring.style.left = `${x}px`;
+  ring.style.top = `${y}px`;
+  document.body.append(ring);
+  setTimeout(() => ring.remove(), 650);
+}
+
+function flashSent() {
+  if (!el.cursor) return;
+  el.cursor.classList.remove('sent');
+  // Reflow so the animation can restart on rapid taps.
+  void el.cursor.offsetWidth;
+  el.cursor.classList.add('sent');
+}
+
 async function handleFrame(buf) {
+  rxFrames += 1;
   lastFrameAt = Date.now();
   // The first real frame is what proves the stream works: dismiss the overlay
   // for every session, not just the demo one.
@@ -381,7 +421,8 @@ function renderSession(s) {
     ['Device state', s.device && s.device.state ? s.device.state : 'fresh'],
     ['macOS runner', s.host ? s.host.macos : '—'],
     ['Xcode', s.host ? s.host.xcode : '—'],
-    ['Stream', `${s.stream ? s.stream.fps : 0} fps target · ${s.stream ? s.stream.frameSeq : 0} frames`],
+    ['Stream', `${s.stream ? s.stream.achievedFps || 0 : 0} fps measured (${s.stream ? s.stream.fps : 0} target) · ${s.stream ? s.stream.frameSeq : 0} frames`],
+    ['Frame', s.stream && s.stream.captureMs ? `${s.stream.captureMs} ms capture · ${Math.round((s.stream.lastFrameBytes || 0) / 1024)} KB` : '—'],
     ['Input driver', s.input ? s.input.driver : '—'],
     ['Touch verified', s.input ? (s.input.touchVerified ? 'yes' : 'not verified') : '—'],
     ['Session started', fmtTime(s.session && s.session.startedAt)],
@@ -422,8 +463,19 @@ function canvasPoint(event) {
 
 let pointer = null;
 
+el.canvas.addEventListener('pointerenter', (event) => {
+  moveCursor(event.clientX, event.clientY);
+  el.cursor.classList.remove('pressed');
+});
+
+el.canvas.addEventListener('pointerleave', () => {
+  if (!pointer) hideCursor();
+});
+
 el.canvas.addEventListener('pointerdown', (event) => {
   el.canvas.focus({ preventScroll: true });
+  moveCursor(event.clientX, event.clientY);
+  el.cursor.classList.add('pressed');
   if (mock.active) {
     mock.taps.push(canvasPoint(event));
     toast('Demo preview: run the workflow to interact with a real simulator.');
@@ -434,6 +486,7 @@ el.canvas.addEventListener('pointerdown', (event) => {
 });
 
 el.canvas.addEventListener('pointermove', (event) => {
+  moveCursor(event.clientX, event.clientY);
   if (!pointer) return;
   const p = canvasPoint(event);
   pointer.moved = Math.max(pointer.moved, Math.hypot(p.x - pointer.x, p.y - pointer.y));
@@ -441,19 +494,35 @@ el.canvas.addEventListener('pointermove', (event) => {
 });
 
 el.canvas.addEventListener('pointerup', (event) => {
-  if (!pointer || mock.active) { pointer = null; return; }
+  el.cursor.classList.remove('pressed');
+  if (mock.active) {
+    // Touch is not available in the demo: show the ring without claiming a send.
+    rippleAt(event.clientX, event.clientY);
+    pointer = null;
+    return;
+  }
+  if (!pointer) { pointer = null; return; }
   const p = canvasPoint(event);
   const duration = Date.now() - pointer.at;
   const distance = Math.hypot(p.x - pointer.x, p.y - pointer.y);
-  if (distance < 0.012 && duration < 500) {
-    send({ type: 'tap', x: p.x, y: p.y });
-  } else {
-    send({ type: 'swipe', x1: pointer.x, y1: pointer.y, x2: p.x, y2: p.y, durationMs: Math.min(1200, Math.max(80, duration)) });
+  const sent = distance < 0.012 && duration < 500
+    ? send({ type: 'tap', x: p.x, y: p.y })
+    : send({ type: 'swipe', x1: pointer.x, y1: pointer.y, x2: p.x, y2: p.y, durationMs: Math.min(1200, Math.max(80, duration)) });
+  if (sent) {
+    rippleAt(event.clientX, event.clientY);
+    flashSent();
   }
   pointer = null;
 });
 
-el.canvas.addEventListener('pointercancel', () => { pointer = null; });
+el.canvas.addEventListener('pointercancel', () => {
+  pointer = null;
+  el.cursor.classList.remove('pressed');
+  hideCursor();
+});
+
+// A mouse leaving the window mid-drag would otherwise leave the ring behind.
+window.addEventListener('blur', () => { if (!pointer) hideCursor(); });
 
 /* ---------------------------------------------------------------- buttons --- */
 
@@ -534,6 +603,21 @@ window.addEventListener('keydown', (event) => {
     send({ type: 'home' });
   }
 });
+
+// Measured frame rate, not the configured one: this is what the runner is
+// actually delivering over the tunnel.
+setInterval(() => {
+  if (!el.streamStat) return;
+  rxFps = rxFrames;
+  rxFrames = 0;
+  if (rxFps > 0) {
+    const ms = status && status.stream && status.stream.captureMs ? ` · ${status.stream.captureMs} ms` : '';
+    el.streamStat.textContent = `${rxFps} fps${ms}`;
+    el.streamStat.hidden = false;
+  } else if (el.streamStat.hidden === false) {
+    el.streamStat.textContent = 'waiting for frames';
+  }
+}, 1000);
 
 setInterval(() => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;

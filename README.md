@@ -76,7 +76,7 @@ GitHub Actions (macos-latest)
 | --- | --- | --- |
 | `device` | *(blank)* | Case-insensitive device name, e.g. `iPhone 16 Pro`. Blank picks the newest available iPhone in the newest stable runtime. |
 | `duration_minutes` | `30` | Clamped to 1–240. The job timeout is 280 minutes. |
-| `frame_rate` | `6` | 1–15 fps. Higher is smoother and uses more bandwidth. |
+| `frame_rate` | `30` | 1–90 frame-rate **cap**. The loop runs as fast as `simctl` allows; this only limits it. |
 | `run_tests` | `false` | Runs `xcodebuild test` for the scheme (15 minute cap). |
 | `install_input_driver` | `true` | Installs `idb`/`AXe`/`cliclick`. Adds a few minutes; set `false` for a view-only session. |
 
@@ -103,9 +103,16 @@ Known limits:
   `AXe` the viewer rotates the canvas locally and says so.
 - **Text input** is injected as text (not per-keystroke), so the on-screen
   keyboard never animates.
-- Stream latency is bounded by the capture loop (`simctl io screenshot` per
-  frame), typically 6–10 fps at 750 px wide. This is a framebuffer stream, not a
-  hardware video encoder.
+- Stream rate is bounded by the capture loop (`simctl io screenshot` per frame).
+  Frames are read straight from `simctl`'s stdout at native resolution, so no
+  encoding or `sips` process is paid per frame; the viewer shows the **measured**
+  rate (`N fps · capture ms`), and `frame_rate` is only a ceiling. Expect roughly
+  3–6 fps on a standard runner.
+- **90 fps is not reachable this way.** `simctl` screenshots cost ~200–350 ms
+  each on a hosted runner, and JPEG over a tunnel cannot carry 90 frames a
+  second. Real 30–60 fps needs a video encoder path (ScreenCaptureKit/H.264 in
+  the browser via WebCodecs or MSE) on a self-hosted Mac, which this workflow
+  does not implement.
 
 ## Files
 

@@ -17,8 +17,11 @@
  *   UDID                 simulator UDID (required unless SIM_MOCK=1)
  *   SIM_MOCK=1           render a demo screen in the browser, no simulator
  *   SESSION_DIR          directory holding detected environment + capability files
- *   FRAME_FPS            target frames per second (default 6)
- *   FRAME_WIDTH          downscaled frame width in px (default 750)
+ *   FRAME_FPS            target frames per second (default 30; the capture loop
+ *                        runs as fast as the device allows, this is only a cap)
+ *   FRAME_WIDTH          frame width in px; 0 = native device resolution, which
+ *                        skips the per-frame `sips` spawn entirely (default 0)
+ *   FRAME_QUALITY        JPEG quality when a downscale happens (default 62)
  *   DEVICE_NAME / IOS_VERSION / XCODE_VERSION / MACOS_VERSION / PUBLIC_URL
  */
 
@@ -36,8 +39,11 @@ const TOKEN = (process.env.SESSION_TOKEN || '').trim();
 const MOCK = process.env.SIM_MOCK === '1';
 const UDID = (process.env.UDID || '').trim();
 const SESSION_DIR = process.env.SESSION_DIR || path.join(__dirname, '..', '.session');
-const FPS = Math.min(15, Math.max(1, Number(process.env.FRAME_FPS || 6)));
-const FRAME_WIDTH = Math.max(320, Math.min(1400, Number(process.env.FRAME_WIDTH || 750)));
+const FPS = Math.min(90, Math.max(1, Number(process.env.FRAME_FPS || 30)));
+// 0 means "send the device's own resolution". Downscaling costs an extra `sips`
+// process per frame, which was a third of the per-frame time.
+const FRAME_WIDTH = Math.min(1400, Math.max(0, Number(process.env.FRAME_WIDTH || 0)));
+const FRAME_QUALITY = Math.min(95, Math.max(30, Number(process.env.FRAME_QUALITY || 62)));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'simview-'));
 const STARTED_AT = new Date().toISOString();
@@ -141,7 +147,10 @@ function status() {
     },
     stream: {
       fps: FPS,
-      width: FRAME_WIDTH,
+      achievedFps: Math.round((state.achievedFps || 0) * 10) / 10,
+      width: FRAME_WIDTH || (state.pointSize && state.pointSize.pixels ? state.pointSize.pixels.width : 0),
+      mode: 'jpeg',
+      quality: FRAME_WIDTH ? FRAME_QUALITY : null,
       frameSeq: state.frameSeq,
       lastFrameAt: state.lastFrameAt,
       lastFrameBytes: state.lastFrameBytes,
@@ -216,37 +225,67 @@ async function detectPointSize() {
 
 // Calling the resolved simctl binary skips an `xcrun` lookup on every frame,
 // which is a measurable part of the per-frame cost.
+let SIMCTL_BIN = 'simctl';
 let SIMCTL_IO = 'xcrun simctl io';
 
 async function resolveSimctl() {
   const r = await execSh('xcrun --find simctl');
   const found = r.ok ? r.stdout.trim().split('\n')[0] : '';
   if (found && found.startsWith('/')) {
+    SIMCTL_BIN = found;
     SIMCTL_IO = `${JSON.stringify(found)} io`;
     console.log('[stream] simctl resolved to ' + found);
   }
 }
 
+// The screenshot is written to stdout and read as a Buffer, so a frame never
+// touches the disk. Encoding is forced to buffer: the default utf8 encoding
+// would mangle the JPEG bytes.
+function simctlJpeg(timeout = 20000) {
+  return new Promise((resolve) => {
+    execFile(
+      SIMCTL_BIN,
+      ['io', UDID, 'screenshot', '--type=jpeg', '-'],
+      { encoding: 'buffer', maxBuffer: 96 * 1024 * 1024, timeout },
+      (err, stdout) => {
+        if (err || !stdout || stdout.length < 512) return resolve(null);
+        return resolve(Buffer.from(stdout));
+      }
+    );
+  });
+}
+
 async function captureOnce() {
   if (MOCK) return null;
-  const raw = path.join(TMP, 'frame-raw.jpg');
+  const raw = await simctlJpeg();
+  if (!raw) {
+    state.captureErrors += 1;
+    state.lastCaptureError = 'simctl screenshot produced no frame';
+    return null;
+  }
+  const nativeW = state.pointSize && state.pointSize.pixels ? state.pointSize.pixels.width : 0;
+  // Only pay for a downscale when one is actually requested.
+  if (!FRAME_WIDTH || !nativeW || FRAME_WIDTH >= nativeW - 2) return raw;
+  const inFile = path.join(TMP, 'frame-raw.jpg');
   const out = path.join(TMP, 'frame.jpg');
+  try {
+    fs.writeFileSync(inFile, raw);
+  } catch (err) {
+    state.lastCaptureError = String(err.message);
+    return raw;
+  }
   const r = await execSh(
-    `${SIMCTL_IO} ${JSON.stringify(UDID)} screenshot --type=jpeg ${JSON.stringify(raw)} && ` +
-      `sips -s format jpeg -s formatOptions 62 --resampleWidth ${FRAME_WIDTH} ${JSON.stringify(raw)} --out ${JSON.stringify(out)} >/dev/null`,
-    30000
+    `sips -s format jpeg -s formatOptions ${FRAME_QUALITY} --resampleWidth ${FRAME_WIDTH} ${JSON.stringify(inFile)} --out ${JSON.stringify(out)} >/dev/null`,
+    15000
   );
   if (!r.ok) {
-    state.captureErrors += 1;
-    state.lastCaptureError = (r.stderr || r.stdout || 'capture failed').trim().slice(0, 500);
-    return null;
+    // A failed downscale must not cost a frame: send the native one instead.
+    return raw;
   }
   try {
     return fs.readFileSync(out);
-  } catch (err) {
-    state.captureErrors += 1;
-    state.lastCaptureError = String(err.message);
-    return null;
+  } catch (_) {
+    return raw;
   }
 }
 
@@ -257,6 +296,13 @@ async function captureLoop() {
     const started = Date.now();
     const buf = await captureOnce();
     if (buf) {
+      const now = Date.now();
+      // Achieved rate is measured from frame arrivals, never from the target.
+      if (state.prevFrameAt) {
+        const inst = 1000 / Math.max(1, now - state.prevFrameAt);
+        state.achievedFps = state.achievedFps ? state.achievedFps * 0.85 + inst * 0.15 : inst;
+      }
+      state.prevFrameAt = now;
       latestFrame = buf;
       state.frameSeq += 1;
       state.lastFrameAt = new Date().toISOString();
@@ -273,7 +319,10 @@ async function captureLoop() {
     const elapsed = Date.now() - started;
     // Exposed so the achieved frame rate can be measured instead of guessed.
     state.lastCaptureMs = elapsed;
-    await new Promise((r) => setTimeout(r, Math.max(50, interval - elapsed)));
+    // No idle floor: when capture is the bottleneck the loop goes straight into
+    // the next frame, and the target only ever slows it down.
+    const wait = interval - elapsed;
+    await new Promise((r) => (wait > 0 ? setTimeout(r, wait) : setImmediate(r)));
   }
 }
 

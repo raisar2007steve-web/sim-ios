@@ -18,11 +18,11 @@ elif (( DURATION > 240 )); then
   DURATION=240
 fi
 
-FPS_RAW="${INPUT_FPS:-6}"
+FPS_RAW="${INPUT_FPS:-30}"
 FPS_RAW="${FPS_RAW//[^0-9]/}"
-FPS="${FPS_RAW:-6}"
+FPS="${FPS_RAW:-30}"
 if (( FPS < 1 )); then FPS=1; fi
-if (( FPS > 15 )); then FPS=15; fi
+if (( FPS > 90 )); then FPS=90; fi
 
 REQUESTED_DEVICE="${INPUT_DEVICE:-}"
 
