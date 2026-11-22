@@ -161,6 +161,29 @@ roughly with frame area), so it is an estimate and says so. The guard is
 advisory: it never fails a session, because a slow-but-live stream is still the
 product. Nothing is measured if the stream itself failed.
 
+A wider frame is not free in the other direction: any non-zero `frame_width`
+adds a `sips` process per frame, so it trades frame rate for bandwidth. Native
+width stays the default because frame rate is the scarce resource here.
+
+### The default stream is the fast one
+
+The defaults pick the combination that measures fastest on a hosted runner, so a
+run needs no tuning to get it:
+
+| Part | Default | Why it is the fast one |
+| --- | --- | --- |
+| Input driver | `axe` → `idb` → AppleScript, first that probes successfully | `axe` is one short-lived binary; `idb` keeps a companion process next to the simulator and measurably lowers the capture rate, and AppleScript needs an Accessibility grant |
+| Frame width | `0` (native) | a width costs an extra `sips` process per frame, which was a third of the per-frame time |
+| Capture path | `simctl` stdout, temp file only as the fallback | a frame never touches the disk when stdout works |
+| Frame pacing | no idle floor | the loop runs straight into the next capture; `frame_rate` is only a ceiling |
+| Input transport | the existing WebSocket | a tap is one message on the open socket, with no HTTP request and no new TLS handshake through the tunnel |
+
+Touch response is reported rather than assumed: the server times every driver
+call and the viewer's session panel shows `N ms last · N ms average` under
+*Touch latency*, plus the first event's timing in `artifacts/viewer.log`
+(`[input] first tap took 180 ms via axe`). That number is the injection cost on
+the runner, not the network round trip to your browser.
+
 ### Why a VNC/noVNC or RDP build cannot fix it on GitHub runners
 
 Both need to capture the macOS desktop, and macOS gates screen capture behind the

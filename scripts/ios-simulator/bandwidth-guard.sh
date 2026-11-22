@@ -152,7 +152,7 @@ esac
 
 SUGGEST="Lower \`frame_width\` (e.g. 750) to cut the transfer rate; it is not measured at a smaller width yet."
 if [[ "$BW_sug_width" != "0" ]]; then
-  SUGGEST="Lower \`frame_width\` to **${BW_sug_width}**: about ${BW_sug_rate_h} (~${BW_sug_gbh} GB/h) at the measured ${BW_fps} fps."
+  SUGGEST="Lower \`frame_width\` to **${BW_sug_width}**: about ${BW_sug_rate_h} (~${BW_sug_gbh} GB/h) at the measured ${BW_fps} fps. That width costs one extra \`sips\` per frame, so some frame rate is traded for the bandwidth."
   if [[ "$BW_sug_fits" != "yes" ]]; then
     SUGGEST="$SUGGEST Even that is above the guard (${BW_budget_h}), so the quota will still limit a long session; the estimate assumes JPEG size scales with pixel count."
   fi

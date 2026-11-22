@@ -425,6 +425,9 @@ function renderSession(s) {
     ['Frame', s.stream && s.stream.captureMs ? `${s.stream.captureMs} ms capture · ${Math.round((s.stream.lastFrameBytes || 0) / 1024)} KB` : '—'],
     ['Input driver', s.input ? s.input.driver : '—'],
     ['Touch verified', s.input ? (s.input.touchVerified ? 'yes' : 'not verified') : '—'],
+    ['Touch latency', s.input && s.input.latencyMs
+      ? `${s.input.lastLatencyMs || s.input.latencyMs} ms last · ${s.input.latencyMs} ms average`
+      : '—'],
     ['Session started', fmtTime(s.session && s.session.startedAt)],
     ['Session ends', s.session && s.session.expiresAt ? fmtTime(s.session.expiresAt) : 'when the run is cancelled'],
   ];

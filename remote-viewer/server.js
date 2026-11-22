@@ -69,6 +69,8 @@ const state = {
   driverAttempts: [],
   inputEvents: 0,
   rejectedInputEvents: 0,
+  inputLastMs: 0,
+  inputAvgMs: 0,
 };
 
 /* ------------------------------------------------------------- helpers --- */
@@ -159,7 +161,15 @@ function status() {
       captureErrors: state.captureErrors,
       lastCaptureError: state.lastCaptureError,
     },
-    input: capability(),
+    // Touch response is measured, not assumed: how long the driver call for the
+    // last injected event took, plus a rolling average. The fastest backend
+    // (axe) is the default, and this is how that shows up in the viewer.
+    input: {
+      ...capability(),
+      latencyMs: Math.round(state.inputAvgMs || 0),
+      lastLatencyMs: Math.round(state.inputLastMs || 0),
+      events: state.inputEvents,
+    },
     auth: { required: !!TOKEN },
   };
 }
@@ -502,6 +512,7 @@ async function handleInput(ws, msg) {
   const toX = (v) => (pts ? v * pts.width : v * 400);
   const toY = (v) => (pts ? v * pts.height : v * 800);
   let result = { ok: false, stderr: 'unsupported message' };
+  const dispatchedAt = Date.now();
 
   switch (msg.type) {
     case 'tap': {
@@ -537,11 +548,18 @@ async function handleInput(ws, msg) {
     default:
       break;
   }
+  const tookMs = Date.now() - dispatchedAt;
+  state.inputLastMs = tookMs;
+  state.inputAvgMs = state.inputAvgMs ? state.inputAvgMs * 0.8 + tookMs * 0.2 : tookMs;
+  if (state.inputEvents === 0) {
+    console.log(`[input] first ${msg.type} took ${tookMs} ms via ${state.driverName}`);
+  }
   state.inputEvents += 1;
   ws.send(JSON.stringify({
     type: 'input-result',
     action: msg.type,
     ok: !!result.ok,
+    latencyMs: tookMs,
     error: result.ok ? null : String(result.stderr || result.error || 'failed').slice(0, 300),
     capability: capability(),
   }));
