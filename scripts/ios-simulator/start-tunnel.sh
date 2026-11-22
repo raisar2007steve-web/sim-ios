@@ -288,8 +288,32 @@ try_cloudflared_named() {
   return 1
 }
 
+# Provider order. `tunnel` (workflow input) selects which one is tried first; the
+# rest stay as fallbacks so a provider that is not configured or is down cannot
+# leave the runner without a URL.
+PREF="$(state_get TUNNEL_PREFERENCE "auto")"
+case "$PREF" in
+  ngrok)
+    PROVIDERS=(try_ngrok try_cloudflared_named try_cloudflared_quick try_localhost_run)
+    [[ -n "${NGROK_AUTHTOKEN:-}" ]] || diag "ngrok selected but NGROK_AUTHTOKEN is not set; it will be skipped"
+    ;;
+  cloudflare)
+    PROVIDERS=(try_cloudflared_named try_cloudflared_quick try_ngrok try_localhost_run)
+    ;;
+  quick)
+    PROVIDERS=(try_cloudflared_quick try_localhost_run)
+    ;;
+  ssh)
+    PROVIDERS=(try_localhost_run)
+    ;;
+  *)
+    PROVIDERS=(try_cloudflared_named try_ngrok try_cloudflared_quick try_localhost_run)
+    ;;
+esac
+diag "tunnel preference: $PREF -> ${PROVIDERS[*]}"
+
 PUBLIC_URL=""
-for provider in try_cloudflared_named try_ngrok try_cloudflared_quick try_localhost_run; do
+for provider in "${PROVIDERS[@]}"; do
   diag "attempt: $provider"
   # lib.sh turns on `set -e`; a provider that is not configured or fails must
   # fall through to the next one instead of aborting the chain.

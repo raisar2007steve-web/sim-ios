@@ -31,6 +31,13 @@ MIN_FPS_RAW="${MIN_FPS_RAW//[^0-9]/}"
 MIN_FPS="${MIN_FPS_RAW:-4}"
 if (( MIN_FPS > 120 )); then MIN_FPS=120; fi
 
+# Which tunnel provider is tried first (auto | ngrok | cloudflare | quick | ssh).
+TUNNEL_PREF="$(printf '%s' "${INPUT_TUNNEL:-ngrok}" | tr '[:upper:]' '[:lower:]')"
+case "$TUNNEL_PREF" in
+  ngrok|cloudflare|quick|ssh|auto) ;;
+  *) warn "Unknown tunnel selection '$TUNNEL_PREF'; using ngrok."; TUNNEL_PREF="ngrok" ;;
+esac
+
 REQUESTED_DEVICE="${INPUT_DEVICE:-}"
 
 # Temporary session credential. Never printed: masked in logs, delivered only
@@ -57,6 +64,7 @@ state_set SESSION_EXPIRES_AT "$EXPIRES_AT"
 state_set REQUESTED_DEVICE "$REQUESTED_DEVICE"
 state_set FRAME_FPS "$FPS"
 state_set STREAM_MIN_FPS "$MIN_FPS"
+state_set TUNNEL_PREFERENCE "$TUNNEL_PREF"
 
 if [[ "$UNLIMITED" == "yes" ]]; then
   log "Session budget: unlimited (runs until cancelled), cap ${FPS} fps, floor ${MIN_FPS} fps, device='${REQUESTED_DEVICE:-auto}'"

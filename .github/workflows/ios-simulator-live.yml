@@ -21,6 +21,10 @@ on:
         description: 'Hard minimum measured fps (0 = no gate). The run fails instead of publishing a slower session.'
         required: false
         default: '4'
+      tunnel:
+        description: 'Tunnel tried first: ngrok | cloudflare | quick | ssh | auto'
+        required: false
+        default: 'ngrok'
       run_tests:
         description: 'Run unit/UI tests when the scheme supports them'
         required: false
@@ -72,6 +76,7 @@ jobs:
           INPUT_DURATION: ${{ inputs.duration_minutes }}
           INPUT_FPS: ${{ inputs.frame_rate }}
           INPUT_MIN_FPS: ${{ inputs.min_fps }}
+          INPUT_TUNNEL: ${{ inputs.tunnel }}
           INPUT_DEVICE: ${{ inputs.device }}
         run: bash scripts/ios-simulator/init-session.sh
 

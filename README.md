@@ -77,6 +77,8 @@ GitHub Actions (macos-latest)
 | `device` | *(blank)* | Case-insensitive device name, e.g. `iPhone 16 Pro`. Blank picks the newest available iPhone in the newest stable runtime. |
 | `duration_minutes` | `30` | Clamped to 1–240. The job timeout is 280 minutes. |
 | `frame_rate` | `30` | 1–90 frame-rate **cap**. The loop runs as fast as `simctl` allows; this only limits it. |
+| `min_fps` | `4` | Hard floor on the measured rate. Below it the run fails without publishing; `0` disables the gate. |
+| `tunnel` | `ngrok` | Provider tried first: `ngrok`, `cloudflare`, `quick`, `ssh`, `auto`. See *Choosing the tunnel*. |
 | `run_tests` | `false` | Runs `xcodebuild test` for the scheme (15 minute cap). |
 | `install_input_driver` | `true` | Installs `idb`/`AXe`/`cliclick`. Adds a few minutes; set `false` for a view-only session. |
 
@@ -210,10 +212,26 @@ forever, and no inbound port is opened anywhere.
    (`something.ngrok-free.app`).
 2. Secrets: `NGROK_AUTHTOKEN`, and `NGROK_STATIC_DOMAIN` (secret or variable)
    set to that hostname.
+3. Leave the `tunnel` input on its default `ngrok`.
 
-The named tunnel is tried first, then the ngrok static domain, then the random
-quick tunnels — so if a permanent provider is configured it is always the one
-used, and the address never changes.
+### Choosing the tunnel
+
+The `tunnel` input sets which provider is tried **first**; the others stay as
+fallbacks so one provider being down never leaves a run without a URL.
+
+| `tunnel` | Order |
+| --- | --- |
+| `ngrok` *(default)* | ngrok (static domain, else random) → Cloudflare named → Cloudflare quick → localhost.run |
+| `cloudflare` | Cloudflare named → quick → ngrok → localhost.run |
+| `quick` | Cloudflare quick → localhost.run (random URL, no account) |
+| `ssh` | localhost.run only |
+| `auto` | named → ngrok → quick → localhost.run |
+
+ngrok needs `NGROK_AUTHTOKEN`: ngrok no longer serves anonymous tunnels. Without
+the secret the step logs that it is skipping ngrok and moves to the next
+provider, so choosing `ngrok` never breaks a run. With a static domain the
+address stays the same across runs; without one, ngrok issues a random
+`*.ngrok-free.app` host each time.
 
 **Privacy.** The session always requires the temporary `?token=` (48 hex
 characters, HttpOnly cookie or `Authorization: Bearer`), and the tunnel exposes
