@@ -17,6 +17,10 @@ on:
         description: 'Frame-rate cap (1-90). The loop runs as fast as the device allows; this only limits it.'
         required: false
         default: '30'
+      min_fps:
+        description: 'Hard minimum measured fps (0 = no gate). The run fails instead of publishing a slower session.'
+        required: false
+        default: '5'
       run_tests:
         description: 'Run unit/UI tests when the scheme supports them'
         required: false
@@ -44,7 +48,10 @@ concurrency:
 jobs:
   live:
     name: Live iOS Simulator session
-    runs-on: macos-latest
+    # Set the RUNNER_LABEL repository variable (for example `self-hosted, macOS`)
+    # to run the same session on a Mac you control. That is what 60/90 fps needs:
+    # a hosted runner cannot be granted macOS screen-capture permission.
+    runs-on: ${{ vars.RUNNER_LABEL || 'macos-latest' }}
     timeout-minutes: 350
     env:
       SESSION_DIR: ${{ github.workspace }}/.session
@@ -64,6 +71,7 @@ jobs:
         env:
           INPUT_DURATION: ${{ inputs.duration_minutes }}
           INPUT_FPS: ${{ inputs.frame_rate }}
+          INPUT_MIN_FPS: ${{ inputs.min_fps }}
           INPUT_DEVICE: ${{ inputs.device }}
         run: bash scripts/ios-simulator/init-session.sh
 

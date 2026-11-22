@@ -24,6 +24,13 @@ FPS="${FPS_RAW:-30}"
 if (( FPS < 1 )); then FPS=1; fi
 if (( FPS > 90 )); then FPS=90; fi
 
+# Hard rate gate: the run refuses to publish a session that measures slower than
+# this. 0 disables the gate.
+MIN_FPS_RAW="${INPUT_MIN_FPS:-5}"
+MIN_FPS_RAW="${MIN_FPS_RAW//[^0-9]/}"
+MIN_FPS="${MIN_FPS_RAW:-5}"
+if (( MIN_FPS > 120 )); then MIN_FPS=120; fi
+
 REQUESTED_DEVICE="${INPUT_DEVICE:-}"
 
 # Temporary session credential. Never printed: masked in logs, delivered only
@@ -49,9 +56,10 @@ state_set SESSION_STARTED_AT "$STARTED_AT"
 state_set SESSION_EXPIRES_AT "$EXPIRES_AT"
 state_set REQUESTED_DEVICE "$REQUESTED_DEVICE"
 state_set FRAME_FPS "$FPS"
+state_set STREAM_MIN_FPS "$MIN_FPS"
 
 if [[ "$UNLIMITED" == "yes" ]]; then
-  log "Session budget: unlimited (runs until cancelled), target ${FPS} fps, device='${REQUESTED_DEVICE:-auto}'"
+  log "Session budget: unlimited (runs until cancelled), cap ${FPS} fps, floor ${MIN_FPS} fps, device='${REQUESTED_DEVICE:-auto}'"
 else
-  log "Session budget: ${DURATION} min (ends ${EXPIRES_AT}), target ${FPS} fps, device='${REQUESTED_DEVICE:-auto}'"
+  log "Session budget: ${DURATION} min (ends ${EXPIRES_AT}), cap ${FPS} fps, floor ${MIN_FPS} fps, device='${REQUESTED_DEVICE:-auto}'"
 fi

@@ -7,7 +7,10 @@
  *   - the WebSocket accepts the session token and delivers a real JPEG frame
  *
  * Writes .session/stream-check.json and exits non-zero when the stream never
- * produces a frame.
+ * produces a frame, or when the measured rate misses STREAM_MIN_FPS.
+ *
+ * The frame rate is timed over a real window instead of counting one frame, so a
+ * session cannot be published as smooth on the strength of a single delivery.
  */
 
 const fs = require('fs');
@@ -28,6 +31,8 @@ function stateGet(key, fallback = '') {
 
 const base = (process.env.PUBLIC_URL || stateGet('PUBLIC_URL')).replace(/\/$/, '');
 const token = process.env.SESSION_TOKEN || stateGet('SESSION_TOKEN');
+const MEASURE_MS = Math.max(2000, Number(process.env.STREAM_MEASURE_MS || 6000));
+const MIN_FPS = Math.max(0, Number(process.env.STREAM_MIN_FPS || 0));
 const result = { checkedAt: new Date().toISOString(), base, auth: {}, stream: {}, ok: false };
 
 async function http(pathname, headers = {}) {
@@ -43,8 +48,23 @@ function checkStream() {
     let hello = null;
     let frames = 0;
     let bytes = 0;
+    let windowStart = 0;
+    let finished = false;
     const done = (error) => {
-      result.stream = { hello: !!hello, frames, bytes, error: error || null, url: wsUrl.replace(token, '***') };
+      if (finished) return;
+      finished = true;
+      const seconds = windowStart ? (Date.now() - windowStart) / 1000 : 0;
+      const fps = seconds ? Math.round((frames / seconds) * 10) / 10 : 0;
+      result.stream = {
+        hello: !!hello,
+        frames,
+        bytes,
+        seconds: Math.round(seconds * 10) / 10,
+        fps,
+        minFps: MIN_FPS,
+        error: error || null,
+        url: wsUrl.replace(token, '***'),
+      };
       try { ws.close(); } catch (_) {}
       resolve();
     };
@@ -54,7 +74,12 @@ function checkStream() {
         frames += 1;
         bytes += data.length;
         clearTimeout(timer);
-        setTimeout(() => done(null), 400);
+        if (!windowStart) {
+          // Time a real window: one fast frame followed by a stall must not read
+          // as a usable frame rate.
+          windowStart = Date.now();
+          setTimeout(() => done(null), MEASURE_MS);
+        }
         return;
       }
       try {
@@ -78,6 +103,10 @@ function checkStream() {
     result.auth.statusEndpoint = status.status;
     await checkStream();
     result.ok = result.auth.withoutToken === 401 && result.auth.withToken === 200 && result.stream.frames > 0;
+    if (result.ok && MIN_FPS > 0 && result.stream.fps < MIN_FPS) {
+      result.error = `measured ${result.stream.fps} fps, below the required ${MIN_FPS} fps`;
+      result.ok = false;
+    }
   } catch (err) {
     result.error = String(err && err.message ? err.message : err);
   }

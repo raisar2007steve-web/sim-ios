@@ -38,12 +38,18 @@ fi
 
 # Streaming check over the public WSS endpoint.
 STREAM_STATUS="failed"
-if node "$SCRIPT_DIR/verify-stream.js" > "$ARTIFACTS_DIR/stream-check.log" 2>&1; then
+MIN_FPS="$(state_get STREAM_MIN_FPS "0")"
+if STREAM_MIN_FPS="$MIN_FPS" node "$SCRIPT_DIR/verify-stream.js" > "$ARTIFACTS_DIR/stream-check.log" 2>&1; then
   STREAM_STATUS="verified"
 else
   tail -n 40 "$ARTIFACTS_DIR/stream-check.log" >&2 || true
   if [[ "$UNAUTH_CODE" == "000" ]]; then
     STREAM_STATUS="not verified from runner (tunnel unreachable from runner)"
+  elif grep -q "below the required" "$ARTIFACTS_DIR/stream-check.log" 2>/dev/null; then
+    # A rate gate is a hard rule: publishing anyway would present a session as
+    # smooth when the measurement says it is not.
+    state_set STREAM_STATUS "failed rate gate"
+    fail_step "The measured frame rate is below the required ${MIN_FPS} fps. See artifacts/stream-check.log."
   fi
 fi
 state_set STREAM_STATUS "$STREAM_STATUS"

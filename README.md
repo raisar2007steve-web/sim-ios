@@ -121,6 +121,45 @@ Known limits:
   the browser via WebCodecs or MSE) on a self-hosted Mac, which this workflow
   does not implement.
 
+### The strict rate gate
+
+`min_fps` (default `5`) is enforced, not advisory. `verify-stream.js` times a
+six-second window on the public WebSocket, stores the measured rate in
+`.session/stream-check.json`, and the run **fails without publishing** when the
+measurement is below the floor. A session is never described as smooth on the
+strength of one delivered frame.
+
+Set `min_fps` to `60` or `90` and this workflow will fail every time on a
+GitHub-hosted runner — that is the honest answer, not a bug. The ceiling here is
+`simctl io screenshot`, around 5 fps.
+
+### Why a VNC/noVNC or RDP build cannot fix it on GitHub runners
+
+Both need to capture the macOS desktop, and macOS gates screen capture behind the
+Screen Recording TCC privilege. `tccutil` can only reset that privilege; the only
+grants are a human switching Screen Sharing on in System Settings or an MDM PPPC
+profile. On a hosted runner neither happens, so Screen Sharing starts, listens on
+5900, accepts the password and shows a black screen with a live cursor (this is
+the well-documented failure in macrun.dev's "The Mac that logs you in and shows
+you nothing", and `actions/runner-images` #8951 for the same capture gate). RDP is
+not available on macOS without a commercial server (xrdp is Linux-only), and
+would hit the same capture privilege. `ffmpeg -f avfoundation` is blocked the same
+way, which is why this project captures through `simctl` — the one API that does
+not need the grant.
+
+### Where 60/90 fps is actually possible
+
+| Option | What you get | What it needs from you |
+| --- | --- | --- |
+| Appetize.io | Your app on a streamed virtual iPhone, H.264 to the browser, embeddable URL/API, ~150–250 ms | An account and an app build upload; billed per minute |
+| Corellium | Virtual iPhone/iPad in the browser, full-speed hardware-virtualised device | Account (per device-hour) |
+| Self-hosted Mac | This repo with a real encoder: ScreenCaptureKit → H.264 → WebRTC, 60 fps and up | A Mac you control once, with the Screen Recording and Accessibility grants given by hand, registered as a self-hosted runner |
+
+The third option is the only way to keep this exact product (own build, own
+session, own tunnel) at 60/90 fps; it is a hosting change, not a code change. The
+workflow already reads `runs-on` from one place, so a self-hosted label is a
+one-line swap once such a Mac exists.
+
 ## Files
 
 ```
