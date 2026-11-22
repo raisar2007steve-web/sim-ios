@@ -150,6 +150,7 @@ function status() {
       achievedFps: Math.round((state.achievedFps || 0) * 10) / 10,
       width: FRAME_WIDTH || (state.pointSize && state.pointSize.pixels ? state.pointSize.pixels.width : 0),
       mode: 'jpeg',
+      capturePath: state.capturePath || 'stdout',
       quality: FRAME_WIDTH ? FRAME_QUALITY : null,
       frameSeq: state.frameSeq,
       lastFrameAt: state.lastFrameAt,
@@ -238,21 +239,59 @@ async function resolveSimctl() {
   }
 }
 
-// The screenshot is written to stdout and read as a Buffer, so a frame never
-// touches the disk. Encoding is forced to buffer: the default utf8 encoding
-// would mangle the JPEG bytes.
-function simctlJpeg(timeout = 20000) {
+// Fast path: the screenshot is written to stdout and read as a Buffer, so a
+// frame never touches the disk. Encoding is forced to buffer: the default utf8
+// encoding would mangle the JPEG bytes. The first failure is logged with the
+// simulator's own message, because not every simctl build accepts `-` here.
+let stdoutCaptureWorks = true;
+
+function simctlJpegStdout(timeout = 20000) {
   return new Promise((resolve) => {
     execFile(
       SIMCTL_BIN,
       ['io', UDID, 'screenshot', '--type=jpeg', '-'],
       { encoding: 'buffer', maxBuffer: 96 * 1024 * 1024, timeout },
-      (err, stdout) => {
-        if (err || !stdout || stdout.length < 512) return resolve(null);
-        return resolve(Buffer.from(stdout));
+      (err, stdout, stderr) => {
+        if (!err && stdout && stdout.length > 512) return resolve(Buffer.from(stdout));
+        const detail = err ? String(stderr || err.message || '').trim() : 'empty stdout';
+        resolve({ error: detail.slice(0, 300) || 'empty stdout' });
       }
     );
   });
+}
+
+// Proven fallback: simctl writes its JPEG to a temp file and the file is read.
+function simctlJpegFile() {
+  const out = path.join(TMP, 'frame.jpg');
+  return new Promise((resolve) => {
+    execFile(
+      SIMCTL_BIN,
+      ['io', UDID, 'screenshot', '--type=jpeg', out],
+      { timeout: 20000 },
+      (err, _stdout, stderr) => {
+        if (err) return resolve({ error: String(stderr || err.message || 'capture failed').trim().slice(0, 300) });
+        try {
+          const buf = fs.readFileSync(out);
+          if (buf.length < 512) return resolve({ error: 'truncated frame' });
+          return resolve(buf);
+        } catch (e) {
+          return resolve({ error: String(e.message) });
+        }
+      }
+    );
+  });
+}
+
+async function simctlJpeg() {
+  if (stdoutCaptureWorks) {
+    const r = await simctlJpegStdout();
+    if (Buffer.isBuffer(r)) return r;
+    stdoutCaptureWorks = false;
+    state.capturePath = 'file';
+    console.log('[stream] stdout capture unavailable (' + r.error + '); using a temp file instead');
+  }
+  const r = await simctlJpegFile();
+  return Buffer.isBuffer(r) ? r : null;
 }
 
 async function captureOnce() {
