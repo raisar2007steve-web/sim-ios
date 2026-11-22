@@ -87,9 +87,16 @@ lets a process inject:
 
 | Driver | Mechanism | Needs |
 | --- | --- | --- |
-| `idb` | CoreSimulator HID injection (`idb ui tap/swipe/text`) | `idb-companion` + `fb-idb` |
-| `AXe` | HID injection through private frameworks | `axe` CLI |
-| AppleScript | GUI events on `Simulator.app`, optional `cliclick` | Accessibility (TCC) grant |
+| `AXe` | HID injection through private frameworks (one short-lived binary) | `axe` CLI |
+| `idb` | CoreSimulator HID injection (`idb ui tap/swipe/text`) | `idb-companion` + `fb-idb`; the companion process costs some frame rate |
+| AppleScript | GUI events on `Simulator.app`, optional `cliclick` | Accessibility (TCC) grant, which hosted runners often refuse |
+
+Drivers are probed in that order and the first one that works is kept. `idb` and
+`AXe` moved the `--udid` flag between the global and per-command level across
+releases, so the probe tries all three placements and records which one the
+installed version accepts (`--udid trailing`, `leading` or `env`). Without that,
+a version change silently dropped every session onto the AppleScript driver,
+whose taps then fail with `osascript is not allowed assistive access`.
 
 The workflow never claims interaction works — it *tests* it. `touch-selftest.js`
 screenshots the simulator, injects a swipe (falling back to a tap), screenshots

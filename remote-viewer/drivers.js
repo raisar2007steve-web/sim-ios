@@ -367,9 +367,11 @@ class AppleDriver {
  * `preferred` (env INPUT_DRIVER) pins one backend when set.
  */
 async function createDriver({ udid, preferred } = {}) {
+  // AXe first: it is a single short-lived binary, while idb keeps a companion
+  // process alive next to the simulator and measurably slows frame capture.
   const candidates = [];
-  if (!preferred || preferred === 'idb') candidates.push(() => new IdbDriver(udid));
   if (!preferred || preferred === 'axe') candidates.push(() => new AxeDriver(udid));
+  if (!preferred || preferred === 'idb') candidates.push(() => new IdbDriver(udid));
   if (!preferred || preferred === 'applescript') candidates.push(() => new AppleDriver(udid));
 
   const attempts = [];
