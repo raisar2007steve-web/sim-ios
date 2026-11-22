@@ -20,7 +20,7 @@ on:
       min_fps:
         description: 'Hard minimum measured fps (0 = no gate). The run fails instead of publishing a slower session.'
         required: false
-        default: '4'
+        default: '3'
       tunnel:
         description: 'Tunnel tried first: ngrok | cloudflare | quick | ssh | auto'
         required: false

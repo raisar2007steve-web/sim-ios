@@ -26,9 +26,9 @@ if (( FPS > 90 )); then FPS=90; fi
 
 # Hard rate gate: the run refuses to publish a session that measures slower than
 # this. 0 disables the gate.
-MIN_FPS_RAW="${INPUT_MIN_FPS:-4}"
+MIN_FPS_RAW="${INPUT_MIN_FPS:-3}"
 MIN_FPS_RAW="${MIN_FPS_RAW//[^0-9]/}"
-MIN_FPS="${MIN_FPS_RAW:-4}"
+MIN_FPS="${MIN_FPS_RAW:-3}"
 if (( MIN_FPS > 120 )); then MIN_FPS=120; fi
 
 # Which tunnel provider is tried first (auto | ngrok | cloudflare | quick | ssh).

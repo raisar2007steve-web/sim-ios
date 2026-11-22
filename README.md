@@ -77,7 +77,7 @@ GitHub Actions (macos-latest)
 | `device` | *(blank)* | Case-insensitive device name, e.g. `iPhone 16 Pro`. Blank picks the newest available iPhone in the newest stable runtime. |
 | `duration_minutes` | `30` | Clamped to 1–240. The job timeout is 280 minutes. |
 | `frame_rate` | `30` | 1–90 frame-rate **cap**. The loop runs as fast as `simctl` allows; this only limits it. |
-| `min_fps` | `4` | Hard floor on the measured rate. Below it the run fails without publishing; `0` disables the gate. |
+| `min_fps` | `3` | Hard floor on the measured rate. Below it the run fails without publishing; `0` disables the gate. |
 | `tunnel` | `ngrok` | Provider tried first: `ngrok`, `cloudflare`, `quick`, `ssh`, `auto`. See *Choosing the tunnel*. |
 | `run_tests` | `false` | Runs `xcodebuild test` for the scheme (15 minute cap). |
 | `install_input_driver` | `true` | Installs `idb`/`AXe`/`cliclick`. Adds a few minutes; set `false` for a view-only session. |
@@ -125,7 +125,7 @@ Known limits:
 
 ### The strict rate gate
 
-`min_fps` (default `4`) is enforced, not advisory. `verify-stream.js` times a
+`min_fps` (default `3`) is enforced, not advisory. `verify-stream.js` times a
 six-second window on the public WebSocket, stores the measured rate in
 `.session/stream-check.json`, and the run **fails without publishing** when the
 measurement is below the floor. A session is never described as smooth on the

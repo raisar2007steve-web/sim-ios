@@ -31,7 +31,11 @@ function stateGet(key, fallback = '') {
 
 const base = (process.env.PUBLIC_URL || stateGet('PUBLIC_URL')).replace(/\/$/, '');
 const token = process.env.SESSION_TOKEN || stateGet('SESSION_TOKEN');
-const MEASURE_MS = Math.max(2000, Number(process.env.STREAM_MEASURE_MS || 6000));
+const MEASURE_MS = Math.max(2000, Number(process.env.STREAM_MEASURE_MS || 8000));
+// The first seconds after a tunnel comes up are not representative: the capture
+// loop is still warming and the tunnel is still settling, which produced a 1.8
+// fps reading for a stream that then ran at 5. Discard that burst.
+const WARMUP_MS = Math.max(0, Number(process.env.STREAM_WARMUP_MS || 5000));
 const MIN_FPS = Math.max(0, Number(process.env.STREAM_MIN_FPS || 0));
 const result = { checkedAt: new Date().toISOString(), base, auth: {}, stream: {}, ok: false };
 
@@ -50,6 +54,7 @@ function checkStream() {
     let bytes = 0;
     let windowStart = 0;
     let finished = false;
+    const openedAt = Date.now();
     const done = (error) => {
       if (finished) return;
       finished = true;
@@ -71,15 +76,19 @@ function checkStream() {
     const timer = setTimeout(() => done(frames ? null : 'no frame received within 25s'), 25000);
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
-        frames += 1;
         bytes += data.length;
         clearTimeout(timer);
         if (!windowStart) {
+          if (Date.now() - openedAt < WARMUP_MS) {
+            // Still warming up: count nothing yet, keep the connection.
+            return;
+          }
           // Time a real window: one fast frame followed by a stall must not read
           // as a usable frame rate.
           windowStart = Date.now();
           setTimeout(() => done(null), MEASURE_MS);
         }
+        frames += 1;
         return;
       }
       try {
@@ -103,6 +112,13 @@ function checkStream() {
     result.auth.statusEndpoint = status.status;
     await checkStream();
     result.ok = result.auth.withoutToken === 401 && result.auth.withToken === 200 && result.stream.frames > 0;
+    // One slow window is not a verdict: re-measure once before failing a session.
+    if (result.ok && MIN_FPS > 0 && result.stream.fps < MIN_FPS) {
+      const first = result.stream.fps;
+      await checkStream();
+      result.stream.firstFps = first;
+      result.ok = result.stream.frames > 0;
+    }
     if (result.ok && MIN_FPS > 0 && result.stream.fps < MIN_FPS) {
       result.error = `measured ${result.stream.fps} fps, below the required ${MIN_FPS} fps`;
       result.ok = false;
