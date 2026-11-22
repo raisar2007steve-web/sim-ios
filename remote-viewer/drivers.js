@@ -17,9 +17,11 @@
 
 const { execFile } = require('child_process');
 
-function run(cmd, args, timeout = 20000) {
+function run(cmd, args, timeout = 20000, env) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const options = { timeout, maxBuffer: 8 * 1024 * 1024 };
+    if (env && Object.keys(env).length) options.env = { ...process.env, ...env };
+    execFile(cmd, args, options, (err, stdout, stderr) => {
       resolve({
         ok: !err,
         code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
@@ -29,6 +31,22 @@ function run(cmd, args, timeout = 20000) {
       });
     });
   });
+}
+
+/**
+ * `--udid` moved between the global and the per-command level across idb and
+ * AXe releases, and the wrong placement answers with an argparse usage dump
+ * instead of a clear error. That silently pushed every session onto the
+ * AppleScript driver, which needs an Accessibility grant hosted runners often
+ * lack. Each driver therefore probes the placements once and keeps the one that
+ * actually runs.
+ */
+const UDID_VARIANTS = ['trailing', 'leading', 'env'];
+
+function udidArgs(variant, udid, args, envName) {
+  if (variant === 'leading') return { args: ['--udid', udid, ...args], env: {} };
+  if (variant === 'env') return { args, env: envName ? { [envName]: udid } : {} };
+  return { args: [...args, '--udid', udid], env: {} };
 }
 
 function which(cmd) {
@@ -61,39 +79,48 @@ class IdbDriver {
   constructor(udid) {
     this.udid = udid;
     this.name = 'idb';
+    this.bin = 'idb';
+    this.envName = 'IDB_UDID';
+    this.variant = 'trailing';
   }
-  base(args) {
-    return ['--udid', this.udid, ...args];
+  call(args, timeout = 20000) {
+    const built = udidArgs(this.variant, this.udid, args, this.envName);
+    return run(this.bin, built.args, timeout, built.env);
   }
   async probe() {
     const exe = await which('idb');
     if (!exe) return { ok: false, reason: 'idb CLI not installed' };
-    const r = await run('idb', this.base(['ui', 'describe-all']), 25000);
-    if (!r.ok) return { ok: false, reason: `idb describe-all failed: ${(r.stderr || r.stdout).slice(0, 300)}` };
-    return { ok: true, detail: 'idb companion reachable' };
+    const failures = [];
+    for (const variant of UDID_VARIANTS) {
+      this.variant = variant;
+      const r = await this.call(['ui', 'describe-all'], 25000);
+      if (r.ok) return { ok: true, detail: `idb companion reachable (--udid ${variant})` };
+      failures.push(`${variant}: ${(r.stderr || r.stdout).replace(/\s+/g, ' ').trim().slice(0, 110)}`);
+    }
+    return { ok: false, reason: `idb describe-all failed: ${failures.join(' | ')}` };
   }
   tap(x, y) {
-    return run('idb', this.base(['ui', 'tap', String(Math.round(x)), String(Math.round(y))]));
+    return this.call(['ui', 'tap', String(Math.round(x)), String(Math.round(y))]);
   }
   swipe(x1, y1, x2, y2, ms) {
-    return run('idb', this.base(['ui', 'swipe', String(Math.round(x1)), String(Math.round(y1)),
-      String(Math.round(x2)), String(Math.round(y2)), '--duration', String(Math.max(0.05, (ms || 250) / 1000))]));
+    return this.call(['ui', 'swipe', String(Math.round(x1)), String(Math.round(y1)),
+      String(Math.round(x2)), String(Math.round(y2)), '--duration', String(Math.max(0.05, (ms || 250) / 1000))]);
   }
   text(txt) {
-    return run('idb', this.base(['ui', 'text', txt]), 30000);
+    return this.call(['ui', 'text', txt], 30000);
   }
   key(keys) {
-    return run('idb', this.base(['ui', 'key', keys]));
+    return this.call(['ui', 'key', keys]);
   }
   home() {
-    return run('idb', this.base(['ui', 'button', 'HOME']));
+    return this.call(['ui', 'button', 'HOME']);
   }
   rotate() {
     // idb has no rotation command; the reader falls back to view rotation.
     return Promise.resolve({ ok: false, code: 1, stderr: 'rotation not supported by idb', command: 'idb ui rotate' });
   }
   async pointSize() {
-    const r = await run('idb', this.base(['ui', 'describe-all', '--json']), 25000);
+    const r = await this.call(['ui', 'describe-all', '--json'], 25000);
     if (r.ok) {
       try {
         const data = JSON.parse(r.stdout);
@@ -123,33 +150,42 @@ class AxeDriver {
   constructor(udid) {
     this.udid = udid;
     this.name = 'axe';
+    this.bin = 'axe';
+    this.envName = 'AXE_UDID';
+    this.variant = 'trailing';
   }
-  base(args) {
-    return ['--udid', this.udid, ...args];
+  call(args, timeout = 20000) {
+    const built = udidArgs(this.variant, this.udid, args, this.envName);
+    return run(this.bin, built.args, timeout, built.env);
   }
   async probe() {
     const exe = await which('axe');
     if (!exe) return { ok: false, reason: 'axe CLI not installed' };
-    const r = await run('axe', this.base(['describe-ui']), 25000);
-    if (!r.ok) return { ok: false, reason: `axe describe-ui failed: ${(r.stderr || r.stdout).slice(0, 300)}` };
-    return { ok: true, detail: 'axe reachable' };
+    const failures = [];
+    for (const variant of UDID_VARIANTS) {
+      this.variant = variant;
+      const r = await this.call(['describe-ui'], 25000);
+      if (r.ok) return { ok: true, detail: `axe reachable (--udid ${variant})` };
+      failures.push(`${variant}: ${(r.stderr || r.stdout).replace(/\s+/g, ' ').trim().slice(0, 110)}`);
+    }
+    return { ok: false, reason: `axe describe-ui failed: ${failures.join(' | ')}` };
   }
   tap(x, y) {
-    return run('axe', this.base(['tap', '-x', String(Math.round(x)), '-y', String(Math.round(y))]));
+    return this.call(['tap', '-x', String(Math.round(x)), '-y', String(Math.round(y))]);
   }
   swipe(x1, y1, x2, y2, ms) {
-    return run('axe', this.base(['swipe', '--start-x', String(Math.round(x1)), '--start-y', String(Math.round(y1)),
+    return this.call(['swipe', '--start-x', String(Math.round(x1)), '--start-y', String(Math.round(y1)),
       '--end-x', String(Math.round(x2)), '--end-y', String(Math.round(y2)),
-      '--duration', String((ms || 250) / 1000)]));
+      '--duration', String((ms || 250) / 1000)]);
   }
   text(txt) {
-    return run('axe', this.base(['type', txt]), 30000);
+    return this.call(['type', txt], 30000);
   }
   key(keys) {
-    return run('axe', this.base(['key', keys]));
+    return this.call(['key', keys]);
   }
   home() {
-    return run('axe', this.base(['button', 'home']));
+    return this.call(['button', 'home']);
   }
   rotate() {
     return Promise.resolve({ ok: false, code: 1, stderr: 'rotation not supported by axe', command: 'axe rotate' });
